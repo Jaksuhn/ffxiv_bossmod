@@ -1,91 +1,75 @@
-﻿namespace BossMod.Stormblood.Savage.O12S1Omega
-{
-    [ModuleInfo(PrimaryActorOID = (uint)OID.OmegaM, CFCID = 594)]
-    public class O12S1Omega : BossModule
-    {
-        public O12S1Omega(WorldState ws, Actor primary) : base(ws, primary, new ArenaBoundsCircle(new(100, 100), 20))
-        {
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 
-        }
+namespace BossMod.Stormblood.Savage.O12S1Omega
+{
+    [ModuleInfo(PrimaryActorOID = (uint)OID.OmegaM)] // cfc id 594
+    public class O12S1Omega(WorldState ws, Actor primary) : BossModule(ws, primary, new ArenaBoundsCircle(new(100, 100), 20))
+    {
+        private Actor? OmegaM;
+        private Actor? OmegaF;
+        private Actor? Omega;
+
+        public Actor? BossP1M() => OmegaM;
+        public Actor? BossP1F() => OmegaF;
+        public Actor? BossP2() => Omega;
+
         protected override void DrawEnemies(int pcSlot, Actor pc)
         {
             Arena.Actor(PrimaryActor, ArenaColor.Enemy);
-            //foreach (var e in Enemies(OID.Omega))
-            //    Arena.Actor(e, ArenaColor.Enemy);
-            //foreach (var e in Enemies(OID.OmegaQQQ))
-            //    Arena.Actor(e, ArenaColor.Enemy);
-            //foreach (var e in Enemies(OID.OmegaQQQQ))
-            //    Arena.Actor(e, ArenaColor.Enemy);
+            Arena.Actor(OmegaM, ArenaColor.Enemy);
+            Arena.Actor(OmegaF, ArenaColor.Enemy);
+            Arena.Actor(Omega, ArenaColor.Enemy);
+        }
+
+        protected override void UpdateModule()
+        {
+            // TODO: this is an ugly hack, think how multi-actor fights can be implemented without it...
+            // the problem is that on wipe, any actor can be deleted and recreated in the same frame
+            OmegaM ??= StateMachine.ActivePhaseIndex == 0 ? Enemies(OID.OmegaM).FirstOrDefault() : null;
+            OmegaF ??= StateMachine.ActivePhaseIndex == 0 ? Enemies(OID.OmegaF).FirstOrDefault() : null;
+            //Omega ??= StateMachine.ActivePhaseIndex == 1 ? Enemies(OID.Omega).FirstOrDefault() : null;
         }
     }
 
-    class O12S1OmegaStates : StateMachineBuilder
+    class OpticalLaser : Components.GenericAOEs
     {
-        public O12S1OmegaStates(BossModule module) : base(module)
+        private Actor? _source;
+        private DateTime _activation;
+
+        private static AOEShapeRect _shape = new(100, 8);
+
+        public OpticalLaser() : base(ActionID.MakeSpell(AID.OpticalLaser)) { }
+
+        public override IEnumerable<AOEInstance> ActiveAOEs(BossModule module, int slot, Actor actor)
         {
-            TrivialPhase()
-                .ActivateOnEnter<Hints>()
-                .ActivateOnEnter<EfficientBladework>();
+            if (_activation != default && _source != null)
+                yield return new(_shape, _source.Position, _source.Rotation, _activation);
+        }
+
+        public override void Init(BossModule module)
+        {
+            _source = module.Enemies(OID.OpticalUnit).FirstOrDefault();
         }
     }
 
-    public enum OID : uint
+    class Discharger : Components.Knockback
     {
-        OmegaQQQ = 0x233C,
-        OmegaM = 0x247D,
-        Omega = 0x247E,
-        OmegaQQQQ = 0x247F,
-        LeftArmUnit = 0x2480,
-        RightArmUnit = 0x2481,
-    };
+        private Actor? _source;
+        private DateTime _activation;
 
-    public enum AID : uint
-    {
-        AutoAttack = 13181, // Boss->player, no cast, range 5
-        SyntheticShield = 13053,
-        Suppression = 13125,
-        OpticalLaser = 13127,
-        BeyondDefense1 = 13099,
-        BeyondDefense2 = 13100,
-        PilePitch = 13102,
-        SubjectSimulationF = 13041,
+        public Discharger() : base(ActionID.MakeSpell(AID.Discharger)) { }
 
-        EfficientBladework = 13097,
-    };
-
-    class Hints : BossComponent
-    {
-        public override void AddHints(BossModule module, int slot, Actor actor, TextHints hints, MovementHints? movementHints)
+        public override IEnumerable<Source> Sources(BossModule module, int slot, Actor actor)
         {
-            //hints.Add("Hint", false);
-            //hints.Add("Risk");
-            //if (movementHints != null)
-            //    movementHints.Add(actor.Position, actor.Position + new WDir(10, 10), ArenaColor.Danger);
-        }
-
-        //public override void AddGlobalHints(BossModule module, GlobalHints hints)
-        //{
-        //    hints.Add("Global");
-        //}
-
-        public override void DrawArenaBackground(BossModule module, int pcSlot, Actor pc, MiniArena arena)
-        {
-            arena.ZoneCircle(module.Bounds.Center, 10, ArenaColor.AOE);
-        }
-
-        public override void DrawArenaForeground(BossModule module, int pcSlot, Actor pc, MiniArena arena)
-        {
-            arena.Actor(module.Bounds.Center, 0.Degrees(), ArenaColor.PC);
+            if (_source != null && _source != actor)
+                yield return new(_source.Position, 13, _activation);
         }
     }
 
     class EfficientBladework : Components.SelfTargetedAOEs
     {
-        public EfficientBladework() : base(ActionID.MakeSpell(AID.EfficientBladework), new AOEShapeCircle(20)) { }
-    }
-
-    class Suppression : Components.SelfTargetedAOEs
-    {
-        public Suppression() : base(ActionID.MakeSpell(AID.Suppression), new AOEShapeRect(40, 10)) { }
+        public EfficientBladework() : base(ActionID.MakeSpell(AID.EfficientBladework1), new AOEShapeCircle(20)) { }
     }
 }
