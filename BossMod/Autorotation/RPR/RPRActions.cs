@@ -13,7 +13,6 @@ namespace BossMod.RPR
         private bool _aoe;
         private Rotation.State _state;
         private Rotation.Strategy _strategy;
-        private bool lastActionisSoD;
 
         public Actions(Autorotation autorot, Actor player)
             : base(autorot, player, Definitions.UnlockQuests, Definitions.SupportedActions)
@@ -45,25 +44,6 @@ namespace BossMod.RPR
 
         public override Targeting SelectBetterTarget(AIHints.Enemy initial)
         {
-            // targeting for aoe
-            if (_state.Unlocked(AID.SpinningScythe))
-            {
-                var bestAOETarget = initial;
-                var bestAOECount = NumTargetsHitByAOEGCD();
-                foreach (var candidate in Autorot.Hints.PriorityTargets.Where(e => e != initial && e.Actor.Position.InCircle(Player.Position, 10)))
-                {
-                    var candidateAOECount = NumTargetsHitByAOEGCD();
-                    if (candidateAOECount > bestAOECount)
-                    {
-                        bestAOETarget = candidate;
-                        bestAOECount = candidateAOECount;
-                    }
-                }
-
-                if (bestAOECount >= 3)
-                    return new(bestAOETarget, 3);
-            }
-
             // targeting for multidot
             var adjTarget = initial;
             if (_state.Unlocked(AID.WhorlofDeath) && !WithoutDOT(initial.Actor))
