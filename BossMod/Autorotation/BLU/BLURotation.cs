@@ -6,18 +6,38 @@ namespace BossMod.BLU
     public static class Rotation
     {
         // full state needed for determining next action
-        public class State : CommonRotation.PlayerState
+        public class State(float[] cooldowns) : CommonRotation.PlayerState(cooldowns)
         {
             public float SwiftcastLeft; // 0 if buff not up, max 10
-            public List<uint> LoadedSpells = Definitions.Loaded();
+            public bool TargetMortalFlame;
+            public float TargetBoMLeft; // 60s max
+            public float TargetDropsyLeft;
+            public float TargetSlowLeft;
+            public float TargetBindLeft;
+            public float TargetLightheadedLeft;
+            public float TargetBegrimedLeft;
 
-            public State(float[] cooldowns) : base(cooldowns) { }
+            public (float Left, int Stacks) SurpanakhasFury; // 3/3 max
+            public int ReproStacks;
 
-            public bool Unlocked(AID aid) => Definitions.Unlocked(aid);
+            public float WaxingLeft; // 15s max
+            public float HarmonizedLeft; // 30s max
+            public float TinglingLeft; // 15s max
+            public float BoostLeft; // 30s max
+            public float BrushWithDeathLeft;
+            public float ToadOilLeft;
+            public float VeilLeft;
+            public float ApokalypsisLeft;
+            public float FlurryLeft;
+
+            public AID[] BLUSlots = new AID[24];
+
+            public bool OnSlot(AID act) => BLUSlots.Contains(act);
 
             public override string ToString()
             {
-                return $"RB={RaidBuffsLeft:f1}, PotCD={PotionCD:f1}, GCD={GCD:f3}, ALock={AnimationLock:f3}+{AnimationLockDelay:f3}, lvl={Level}/{UnlockProgress}";
+                var slots = string.Join(", ", BLUSlots.Select(x => x.ToString()));
+                return $"actions=[{slots}]";
             }
         }
 
@@ -32,9 +52,37 @@ namespace BossMod.BLU
             }
         }
 
-        public static AID GetNextBestGCD(State state, Strategy strategy, bool aoe, bool moving)
+        public static AID GetNextBestGCD(State state, Strategy strategy)
         {
-            return (AID)state.LoadedSpells.FirstOrDefault(x => Service.DataManager.GetExcelSheet<Lumina.Excel.GeneratedSheets.Action>()?.GetRow(x)!.CooldownGroup == 58);
+            if (!state.TargetMortalFlame && state.OnSlot(AID.MortalFlame))
+                return AID.MortalFlame;
+
+            if (
+                state.TargetBoMLeft <= state.GCD + 2.22
+                && state.OnSlot(AID.BreathOfMagic)
+                && state.OnSlot(AID.Bristle)
+                && state.RangeToTarget <= 10
+                && state.BoostLeft == 0
+            )
+                return AID.Bristle;
+
+            if (state.TargetBoMLeft <= state.GCD && state.OnSlot(AID.BreathOfMagic) && state.RangeToTarget <= 10)
+                return AID.BreathOfMagic;
+
+            if (state.OnSlot(AID.TripleTrident) && state.RangeToTarget < 3)
+            {
+                if (
+                    state.OnSlot(AID.Whistle)
+                    && state.CD(CDGroup.TripleTrident) - 2.22 <= state.GCD
+                    && state.HarmonizedLeft - 2.22 <= state.GCD
+                )
+                    return AID.Whistle;
+
+                if (state.CD(CDGroup.TripleTrident) <= state.GCD)
+                    return AID.TripleTrident;
+            }
+
+            return AID.SonicBoom;
         }
 
         public static ActionID GetNextBestOGCD(State state, Strategy strategy, float deadline, bool aoe)
