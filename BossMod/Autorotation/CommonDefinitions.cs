@@ -71,6 +71,10 @@ namespace BossMod
             => res[ActionID.MakeSpell(aid)] = new(range, 0, (int)(object)cdGroup, cooldown, maxChargesAtCap, animationLock);
         public static ActionDefinition GCDWithCharges<AID, CDGroup>(this Dictionary<ActionID, ActionDefinition> res, AID aid, float range, CDGroup cdGroup, float cooldown, int maxChargesAtCap, float animationLock = 0.6f) where AID : Enum where CDGroup : Enum
     => res[ActionID.MakeSpell(aid)] = new(range, 0, (int)(object)cdGroup, cooldown, maxChargesAtCap, animationLock);
+        public static ActionDefinition GCDWithCooldown<AID, CDGroup>(this Dictionary<ActionID, ActionDefinition> res, AID aid, float range, CDGroup cdGroup, float cooldown, float animationLock = 0.6f) where AID : Enum where CDGroup : Enum
+           => res[ActionID.MakeSpell(aid)] = new(range, 0, (int)(object)cdGroup, cooldown, 1, animationLock);
+        public static ActionDefinition GCDCastWithCooldown<AID, CDGroup>(this Dictionary<ActionID, ActionDefinition> res, AID aid, float range, float castTime, CDGroup cdGroup, float cooldown, float animationLock = 0.1f) where AID : Enum where CDGroup : Enum
+            => res[ActionID.MakeSpell(aid)] = new(range, castTime, (int)(object)cdGroup, cooldown, 1, animationLock);
 
         // check whether given actor has tank stance
         public static bool HasTankStance(Actor a)

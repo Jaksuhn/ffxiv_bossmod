@@ -1,4 +1,5 @@
-﻿using Dalamud.Game;
+﻿using BossMod.Data;
+using Dalamud.Game;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -41,6 +42,8 @@ namespace BossMod
         public static WindowSystem? WindowSystem = null;
 
         public static ConfigRoot Config = new();
+
+        internal static CustomComboCache ComboCache { get; set; } = null!;
 
         //public static SharpDX.Direct3D11.Device? Device = null;
     }
