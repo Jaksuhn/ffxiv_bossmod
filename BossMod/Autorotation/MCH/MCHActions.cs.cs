@@ -125,7 +125,7 @@ internal class Actions : CommonActions
     private void OnConfigModified(object? sender, EventArgs args)
     {
         SupportedSpell(AID.PVP_BlastCharge).PlaceholderForAuto =
-            SupportedSpell(AID.SplitShot).PlaceholderForAuto =
+            SupportedSpell(AID.HeatedSplitShot).PlaceholderForAuto =
                 _config.FullRotation ? AutoActionST : AutoActionNone;
     }
 

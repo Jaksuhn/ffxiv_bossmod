@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using System.Numerics;
+using static BossMod.Util.CDFunctions;
 
 namespace BossMod.MCH;
 public static class Rotation
@@ -189,30 +190,30 @@ public static class Rotation
             // gauss & ricochet
             if (state.LastWeaponskill == AID.HeatBlast)
             {
-                if (state.CD(CDGroup.GaussRound) <= state.GCD && Util.CustomComboFunctions.GetRemainingCharges((uint)AID.GaussRound) >= Util.CustomComboFunctions.GetRemainingCharges((uint)AID.Ricochet))
+                if (state.CD(CDGroup.GaussRound) <= state.GCD && GetRemainingCharges((uint)AID.GaussRound) >= GetRemainingCharges((uint)AID.Ricochet))
                     return ActionID.MakeSpell(AID.GaussRound);
 
-                if (state.CD(CDGroup.Ricochet) <= state.GCD && Util.CustomComboFunctions.GetRemainingCharges((uint)AID.Ricochet) >= Util.CustomComboFunctions.GetRemainingCharges((uint)AID.GaussRound))
+                if (state.CD(CDGroup.Ricochet) <= state.GCD && GetRemainingCharges((uint)AID.Ricochet) >= GetRemainingCharges((uint)AID.GaussRound))
                     return ActionID.MakeSpell(AID.Ricochet);
             }
 
             // reassemble
-            if (state.HasWildfire() && !state.Reassembled() && Util.CustomComboFunctions.HasCharges((uint)AID.Reassemble) &&
+            if (state.HasWildfire() && !state.Reassembled() && HasCharges((uint)AID.Reassemble) &&
                 ((state.Unlocked(AID.ChainSaw) && state.CD(CDGroup.ChainSaw) <= state.GCD) ||
                 (state.Unlocked(AID.AirAnchor) && state.CD(CDGroup.AirAnchor) <= state.GCD) ||
                 (!state.Unlocked(AID.AirAnchor) && state.Unlocked(AID.Drill) && (state.CD(CDGroup.Drill) <= state.GCD))))
                 return ActionID.MakeSpell(AID.Reassemble);
 
-            if (!state.HasWildfire() && state.Unlocked(AID.ChainSaw) && state.CD(CDGroup.ChainSaw) <= state.GCD && !state.Reassembled() && Util.CustomComboFunctions.HasCharges((uint)AID.Reassemble))
+            if (!state.HasWildfire() && state.Unlocked(AID.ChainSaw) && state.CD(CDGroup.ChainSaw) <= state.GCD && !state.Reassembled() && HasCharges((uint)AID.Reassemble))
                 return ActionID.MakeSpell(AID.Reassemble);
 
             // gauss and ricochet overcap protection
             if (!state.IsOverheated && !state.HasWildfire())
             {
-                if (state.CD(CDGroup.GaussRound) <= state.GCD && Util.CustomComboFunctions.GetRemainingCharges((uint)AID.GaussRound) >= Util.CustomComboFunctions.GetMaxCharges((uint)AID.GaussRound))
+                if (state.CD(CDGroup.GaussRound) <= state.GCD && GetRemainingCharges((uint)AID.GaussRound) >= GetMaxCharges((uint)AID.GaussRound))
                     return ActionID.MakeSpell(AID.GaussRound);
 
-                if (state.CD(CDGroup.Ricochet) <= state.GCD && Util.CustomComboFunctions.GetRemainingCharges((uint)AID.Ricochet) >= Util.CustomComboFunctions.GetMaxCharges((uint)AID.Ricochet))
+                if (state.CD(CDGroup.Ricochet) <= state.GCD && GetRemainingCharges((uint)AID.Ricochet) >= GetMaxCharges((uint)AID.Ricochet))
                     return ActionID.MakeSpell(AID.Ricochet);
             }
 

@@ -2,7 +2,7 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace BossMod.Util;
-internal abstract partial class CustomComboFunctions
+internal abstract partial class CDFunctions
 {
     /// <summary> Gets the cooldown data for an action. </summary>
     /// <param name="actionID"> Action ID to check. </param>
