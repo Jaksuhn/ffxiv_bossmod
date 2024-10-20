@@ -52,7 +52,7 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
     {
         SelectPrimaryTarget(strategy, ref primaryTarget, 3);
 
-        var gauge = GetGauge<DarkKnightGauge>();
+        var gauge = World.Client.GetGauge<DarkKnightGauge>();
         Darkside = gauge.DarksideTimer * 0.001f;
         Blood = gauge.Blood;
         DarkArts = gauge.DarkArtsState == 1;
@@ -72,6 +72,8 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
 
         if (CountdownRemaining > 0)
             return;
+
+        GoalZoneCombined(3, Hints.GoalAOECircle(5), 3);
 
         if (Darkside > GCD)
         {
@@ -95,7 +97,6 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
                         PushGCD(AID.Torcleaver, primaryTarget);
                         break;
                 }
-
             }
 
             if (ShouldBlood(strategy))
@@ -126,7 +127,7 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
 
     public enum OGCDPriority
     {
-        None = -1,
+        None = 0,
         Edge = 200,
         SaltAndDarkness = 500,
         Carve = 550,
@@ -147,8 +148,10 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
         if (Darkside > 0 && strategy.BuffsOk())
             PushOGCD(AID.LivingShadow, Player, OGCDPriority.LivingShadow);
 
-        if (Blood > 0 || !Unlocked(TraitID.Blackblood))
-            PushOGCD(AID.Delirium, Player, OGCDPriority.Delirium);
+        if (Blood > 0 || !Unlocked(AID.Delirium))
+        {
+            PushOGCD(Unlocked(AID.Delirium) ? AID.Delirium : AID.BloodWeapon, Player, OGCDPriority.Delirium);
+        }
 
         if (!CanWeave(AID.Delirium))
         {
@@ -182,7 +185,7 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
         if (RaidBuffsLeft > GCD)
             return true;
 
-        var impendingBlood = ComboLastMove == (NumAOETargets > 2 ? AID.Unleash : AID.Souleater);
+        var impendingBlood = ComboLastMove == (NumAOETargets > 2 ? AID.Unleash : AID.SyphonStrike);
 
         return Blood + (impendingBlood ? 20 : 0) > 100;
     }
@@ -194,7 +197,7 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
 
         void use(OGCDPriority prio)
         {
-            if (NumLineTargets > 2)
+            if (NumLineTargets > 2 || !Unlocked(AID.EdgeOfDarkness))
                 PushOGCD(AID.FloodOfDarkness, BestLineTarget, prio);
 
             PushOGCD(AID.EdgeOfDarkness, primaryTarget, prio);
@@ -210,14 +213,16 @@ public sealed class DRK(RotationModuleManager manager, Actor player) : Attackxan
             return;
         }
 
+        var buffs = RaidBuffsLeft > GCD || RaidBuffsIn > 9000;
+
         switch (track)
         {
             case EdgeStrategy.Automatic:
-                if (RaidBuffsLeft > GCD)
+                if (buffs)
                     use(OGCDPriority.Edge);
                 break;
             case EdgeStrategy.AutomaticTBN:
-                if (RaidBuffsLeft > GCD && canUseTBN)
+                if (buffs && canUseTBN)
                     use(OGCDPriority.Edge);
                 break;
             case EdgeStrategy.Force:

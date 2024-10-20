@@ -4,19 +4,19 @@
 public class BossModuleConfig : ConfigNode
 {
     // boss module settings
-    [PropertyDisplay("Enable boss modules")]
-    public bool Enable = true;
-
     [PropertyDisplay("Minimal maturity for the module to be loaded", tooltip: "Some modules will have the \"WIP\" status and will not automatically load unless you change this")]
     public BossModuleInfo.Maturity MinMaturity = BossModuleInfo.Maturity.Contributed;
 
     [PropertyDisplay("Allow modules to automatically use actions", tooltip: "Example: modules can automatically use anti-knockback abilities before a knockback happens")]
     public bool AllowAutomaticActions = true;
 
-    [PropertyDisplay("Show testing radar and hint window", tooltip: "Useful for configuring your radar and hint windows without being inside of a boss encounter")]
+    [PropertyDisplay("Show testing radar and hint window", tooltip: "Useful for configuring your radar and hint windows without being inside of a boss encounter", separator: true)]
     public bool ShowDemo = false;
 
     // radar window settings
+    [PropertyDisplay("Enable radar")]
+    public bool Enable = true;
+
     [PropertyDisplay("Lock radar and hint window movement and mouse interaction")]
     public bool Lock = false;
 
@@ -58,6 +58,12 @@ public class BossModuleConfig : ConfigNode
     [PropertyDisplay("Always show all alive party members")]
     public bool ShowIrrelevantPlayers = false;
 
+    [PropertyDisplay("Show role-based colors on otherwise uncolored players in the radar")]
+    public bool ColorPlayersBasedOnRole = false;
+
+    [PropertyDisplay("Always show focus targeted party member", separator: true)]
+    public bool ShowFocusTargetPlayer = false;
+
     // hint window settings
     [PropertyDisplay("Show text hints in separate window", tooltip: "Separates the radar window from the hints window, allowing you to reposition the hints window")]
     public bool HintsInSeparateWindow = false;
@@ -68,7 +74,7 @@ public class BossModuleConfig : ConfigNode
     [PropertyDisplay("Show raidwide hints")]
     public bool ShowGlobalHints = true;
 
-    [PropertyDisplay("Show player hints and warnings")]
+    [PropertyDisplay("Show player hints and warnings", separator: true)]
     public bool ShowPlayerHints = true;
 
     // misc. settings

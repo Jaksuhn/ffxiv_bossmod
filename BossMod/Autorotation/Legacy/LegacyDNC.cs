@@ -142,12 +142,12 @@ public sealed class LegacyDNC : LegacyModule
         _state = new(this);
     }
 
-    public override void Execute(StrategyValues strategy, Actor? primaryTarget, float estimatedAnimLockDelay, float forceMovementIn, bool isMoving)
+    public override void Execute(StrategyValues strategy, Actor? primaryTarget, float estimatedAnimLockDelay, bool isMoving)
     {
         _state.UpdateCommon(primaryTarget, estimatedAnimLockDelay);
         _state.AnimationLockDelay = MathF.Max(0.1f, _state.AnimationLockDelay);
 
-        var gauge = GetGauge<DancerGauge>();
+        var gauge = World.Client.GetGauge<DancerGauge>();
         var curStep = (uint)gauge.CurrentStep;
 
         _state.Feathers = gauge.Feathers;

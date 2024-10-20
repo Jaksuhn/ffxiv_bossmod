@@ -6,12 +6,12 @@ public class ReplayManagementConfig : ConfigNode
     [PropertyDisplay("Show replay management UI")]
     public bool ShowUI = false;
 
-    [PropertyDisplay("Auto record replays on duty start/end")]
-    public bool AutoRecord = false;
+    [PropertyDisplay("Auto record replays on duty start/end or outdoor module start/end")]
+    public bool AutoRecord = true;
 
     [PropertyDisplay("Max replays to keep before removal")]
     [PropertySlider(0, 1000)]
-    public int MaxReplays = 0;
+    public int MaxReplays = 20;
 
     [PropertyDisplay("Record and store server packets in the replay")]
     public bool RecordServerPackets = false;

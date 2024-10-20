@@ -23,7 +23,7 @@ public enum RotationModuleQuality
 // the configuration part of the rotation module
 // importantly, it defines constraints (supported classes and level ranges) and strategy configs (with their sets of possible options) used by the module to make its decisions
 // rotation modules can optionally be constrained to a specific boss module, if they are used to implement custom encounter-specific logic - these would only be available in plans for that module
-public sealed record class RotationModuleDefinition(string DisplayName, string Description, string Author, RotationModuleQuality Quality, BitMask Classes, int MaxLevel, int MinLevel = 1, Type? RelatedBossModule = null, bool CanUseWhileMounted = false, bool CanUseWhileRoleplaying = false)
+public sealed record class RotationModuleDefinition(string DisplayName, string Description, string Author, RotationModuleQuality Quality, BitMask Classes, int MaxLevel, int MinLevel = 1, Type? RelatedBossModule = null, bool CanUseWhileRoleplaying = false)
 {
     public readonly BitMask Classes = Classes;
     public readonly List<StrategyConfig> Configs = [];
@@ -80,7 +80,6 @@ public sealed record class RotationModuleDefinition(string DisplayName, string D
 
 // base class for rotation modules
 // each rotation module should contain a `public static RotationModuleDefinition Definition()` function
-// TODO: i don't think it should know about manager, rework this...
 public abstract class RotationModule(RotationModuleManager manager, Actor player)
 {
     public readonly RotationModuleManager Manager = manager;
@@ -90,7 +89,7 @@ public abstract class RotationModule(RotationModuleManager manager, Actor player
     public AIHints Hints => Manager.Hints;
 
     // the main entry point of the module - given a set of strategy values, fill the queue with a set of actions to execute
-    public abstract void Execute(StrategyValues strategy, Actor? primaryTarget, float estimatedAnimLockDelay, float forceMovementIn, bool isMoving);
+    public abstract void Execute(StrategyValues strategy, Actor? primaryTarget, float estimatedAnimLockDelay, bool isMoving);
 
     public virtual string DescribeState() => "";
 
@@ -109,16 +108,6 @@ public abstract class RotationModule(RotationModuleManager manager, Actor player
     // expected usage is `ResolveTargetOverride(strategy) ?? CustomSmartTargetingLogic(...)`
     protected Actor? ResolveTargetOverride(in StrategyValue strategy) => Manager.ResolveTargetOverride(strategy.Target, strategy.TargetParam);
 
-    // TODO: reconsider...
-    public unsafe T GetGauge<T>() where T : unmanaged
-    {
-        T res = default;
-        ((ulong*)&res)[1] = World.Client.GaugePayload.Low;
-        if (sizeof(T) > 16)
-            ((ulong*)&res)[2] = World.Client.GaugePayload.High;
-        return res;
-    }
-
     protected float StatusDuration(DateTime expireAt) => Math.Max((float)(expireAt - World.CurrentTime).TotalSeconds, 0.0f);
 
     // this also checks pending statuses
@@ -134,25 +123,23 @@ public abstract class RotationModule(RotationModuleManager manager, Actor player
         return status != null ? (StatusDuration(status.Value.ExpireAt), status.Value.Extra & 0xFF) : (0, 0);
     }
     protected (float Left, int Stacks) StatusDetails<SID>(Actor? actor, SID sid, ulong sourceID, float pendingDuration = 1000) where SID : Enum => StatusDetails(actor, (uint)(object)sid, sourceID, pendingDuration);
-
     protected (float Left, int Stacks) SelfStatusDetails(uint sid, float pendingDuration = 1000) => StatusDetails(Player, sid, Player.InstanceID, pendingDuration);
     protected (float Left, int Stacks) SelfStatusDetails<SID>(SID sid, float pendingDuration = 1000) where SID : Enum => StatusDetails(Player, sid, Player.InstanceID, pendingDuration);
 
     protected float SelfStatusLeft(uint sid, float pendingDuration = 1000) => SelfStatusDetails(sid, pendingDuration).Left;
     protected float SelfStatusLeft<SID>(SID sid, float pendingDuration = 1000) where SID : Enum => SelfStatusDetails(sid, pendingDuration).Left;
-
     protected float PotionStatusLeft() => SelfStatusLeft(49, 30);
 
     protected float GCD => World.Client.Cooldowns[ActionDefinitions.GCDGroup].Remaining; // 2.5 max (decreased by SkS), 0 if not on gcd
     protected float PotionCD => World.Client.Cooldowns[ActionDefinitions.PotionCDGroup].Remaining; // variable max
 
     // find a slot containing specified duty action; returns -1 if not found
-    public int FindDutyActionSlot(ActionID action) => Array.IndexOf(World.Client.DutyActions, action);
+    public int FindDutyActionSlot(ActionID action) => Array.FindIndex(World.Client.DutyActions, d => d.Action == action);
     // find a slot containing specified duty action, if other duty action is the specified one; returns -1 if not found, or other action is different
     public int FindDutyActionSlot(ActionID action, ActionID other)
     {
         var slot = FindDutyActionSlot(action);
-        return slot >= 0 && World.Client.DutyActions[1 - slot] == other ? slot : -1;
+        return slot >= 0 && World.Client.DutyActions[1 - slot].Action == other ? slot : -1;
     }
 
     public float DutyActionCD(int slot) => slot is >= 0 and < 2 ? World.Client.Cooldowns[ActionDefinitions.DutyAction0CDGroup + slot].Remaining : float.MaxValue;
@@ -170,5 +157,21 @@ public abstract class RotationModule(RotationModuleManager manager, Actor player
 
         cycleTime %= 120;
         return cycleTime < 20 ? (20 - cycleTime, 0) : (0, 120 - cycleTime);
+    }
+
+    protected (Actor? Target, P Priority) FindBetterTargetBy<P>(Actor? initial, float maxDistanceFromPlayer, Func<Actor, P> prioFunc, Func<AIHints.Enemy, bool>? filterFunc = null) where P : struct, IComparable
+    {
+        var bestTarget = initial;
+        var bestPrio = initial != null ? prioFunc(initial) : default;
+        foreach (var enemy in Hints.PriorityTargets.Where(x => x.Actor != initial && x.Actor.Position.InCircle(Player.Position, maxDistanceFromPlayer + x.Actor.HitboxRadius) && (filterFunc?.Invoke(x) ?? true)))
+        {
+            var newPrio = prioFunc(enemy.Actor);
+            if (newPrio.CompareTo(bestPrio) > 0)
+            {
+                bestPrio = newPrio;
+                bestTarget = enemy.Actor;
+            }
+        }
+        return (bestTarget, bestPrio);
     }
 }

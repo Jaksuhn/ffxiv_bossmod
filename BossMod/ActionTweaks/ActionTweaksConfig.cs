@@ -7,6 +7,10 @@ public sealed class ActionTweaksConfig : ConfigNode
     [PropertyDisplay("Remove extra lag-induced animation lock delay from instant casts (read tooltip!)", tooltip: "Do NOT use with XivAlexander or NoClippy - this should automatically disable itself if they are detected, but double check first!")]
     public bool RemoveAnimationLockDelay = false;
 
+    [PropertyDisplay("Animation lock max. simulated delay (read tooltip!)", tooltip: "Configures the maximum simulated delay in milliseconds when using animation lock removal - this is required and cannot be reduced to zero. Setting this to 20ms will enable triple-weaving when using autorotation. The minimum setting to remove triple-weaving is 26ms. The minimum of 20ms has been accepted by FFLogs and should not cause issues with your logs.")]
+    [PropertySlider(20, 50, Speed = 0.1f)]
+    public int AnimationLockDelayMax = 26;
+
     [PropertyDisplay("Remove extra framerate-induced cooldown delay", tooltip: "Dynamically adjusts cooldown and animation locks to ensure queued actions resolve immediately regardless of framerate limitations")]
     public bool RemoveCooldownDelay = false;
 
@@ -33,7 +37,11 @@ public sealed class ActionTweaksConfig : ConfigNode
     [PropertyDisplay("Automatically cancel a cast when target is dead")]
     public bool CancelCastOnDeadTarget = false;
 
-    [PropertyDisplay("Restore character orientation after action use", tooltip: "There will be no effect if the \"auto face target\" setting in the game's settings is disabled")]
+    [PropertyDisplay("Prevent movement and action execution when pyretic-like mechanics are imminent (set to 0 to disable, otherwise increase threshold depending on your ping).")]
+    [PropertySlider(0, 10, Speed = 0.01f)]
+    public float PyreticThreshold = 1.0f;
+
+    [PropertyDisplay("Restore character orientation after action use (deprecated)", tooltip: "Note: this is deprecated in favour of smart character orientation and will be removed in future")]
     public bool RestoreRotation = false;
 
     [PropertyDisplay("Use actions on mouseover target")]
@@ -44,6 +52,12 @@ public sealed class ActionTweaksConfig : ConfigNode
 
     [PropertyDisplay("Use custom queueing for manually pressed actions", tooltip: "This setting allows better integration with autorotations and will prevent you from triple-weaving or drifting GCDs if you press a healing ability while autorotation is going on")]
     public bool UseManualQueue = false;
+
+    [PropertyDisplay("Automatically manage auto attacks", tooltip: "This setting prevents starting autos early during countdown, starts them automatically at pull, when switching targets and when using any actions that don't explicitly cancel autos.")]
+    public bool AutoAutos = false;
+
+    [PropertyDisplay("Automatically dismount to execute actions")]
+    public bool AutoDismount = true;
 
     public enum GroundTargetingMode
     {

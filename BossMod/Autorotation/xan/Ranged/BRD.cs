@@ -65,7 +65,7 @@ public sealed class BRD(RotationModuleManager manager, Actor player) : Attackxan
     {
         SelectPrimaryTarget(strategy, ref primaryTarget, 25);
 
-        var gauge = GetGauge<BardGauge>();
+        var gauge = World.Client.GetGauge<BardGauge>();
 
         SongTimer = gauge.SongTimer * 0.001f;
         Repertoire = gauge.Repertoire;
@@ -214,8 +214,8 @@ public sealed class BRD(RotationModuleManager manager, Actor player) : Attackxan
         if (!strategy.BuffsOk())
             return false;
 
-        if (CD(AID.RagingStrikes) > 55)
-            return CD(AID.RagingStrikes) < 60 || Soul == 100;
+        if (ReadyIn(AID.RagingStrikes) > 55)
+            return ReadyIn(AID.RagingStrikes) < 60 || Soul == 100;
 
         // use in 2min
         return RagingStrikes > GCD;

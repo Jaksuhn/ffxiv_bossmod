@@ -13,14 +13,9 @@ public record struct Color(uint ABGR)
 
     private const float ToFloat = 1.0f / 255;
 
-    public static Color FromRGBA(uint rgba)
-    {
-        var a = rgba & 0xFF;
-        var b = (rgba >> 8) & 0xFF;
-        var g = (rgba >> 16) & 0xFF;
-        var r = (rgba >> 24) & 0xFF;
-        return new((a << 24) | (b << 16) | (g << 8) | r);
-    }
+    public static Color FromComponents(uint r, uint g, uint b, uint a = 255) => new(((a & 0xFF) << 24) | ((b & 0xFF) << 16) | ((g & 0xFF) << 8) | (r & 0xFF));
+    public static Color FromRGBA(uint rgba) => FromComponents(rgba >> 24, rgba >> 16, rgba >> 8, rgba);
+    public static Color FromARGB(uint argb) => FromComponents(argb >> 16, argb >> 8, argb, argb >> 24);
 
     public static Color FromFloat4(Vector4 vec)
     {
@@ -28,10 +23,11 @@ public record struct Color(uint ABGR)
         var g = Math.Clamp((uint)(vec.Y * 255), 0, 255);
         var b = Math.Clamp((uint)(vec.Z * 255), 0, 255);
         var a = Math.Clamp((uint)(vec.W * 255), 0, 255);
-        return new((a << 24) | (b << 16) | (g << 8) | r);
+        return FromComponents(r, g, b, a);
     }
 
     public readonly uint ToRGBA() => (R << 24) | (G << 16) | (B << 8) | A;
+    public readonly uint ToARGB() => (A << 24) | (R << 16) | (G << 8) | B;
     public readonly Vector4 ToFloat4() => new Vector4(R, G, B, A) * ToFloat;
 }
 
