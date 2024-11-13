@@ -7,7 +7,7 @@ using ImGuiNET;
 
 namespace BossMod;
 
-class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManagerEx amex, AIHintsBuilder hintBuilder, IDalamudPluginInterface dalamud) : UIWindow("Boss mod debug UI", false, new(300, 200))
+class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ZoneModuleManager zmm, ActionManagerEx amex, AIHintsBuilder hintBuilder, IDalamudPluginInterface dalamud) : UIWindow("Boss mod debug UI", false, new(300, 200))
 {
     private readonly DebugObstacles _debugObstacles = new(hintBuilder.Obstacles, dalamud);
     private readonly DebugObjects _debugObjects = new();
@@ -18,7 +18,6 @@ class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManage
     private readonly DebugHate _debugHate = new();
     private readonly DebugInput _debugInput = new(autorot);
     private readonly DebugAutorotation _debugAutorot = new(autorot);
-    private readonly DebugClassDefinitions _debugClassDefinitions = new(ws);
     private readonly DebugAddon _debugAddon = new();
     private readonly DebugTiming _debugTiming = new();
     //private readonly DebugVfx _debugVfx = new();
@@ -27,7 +26,6 @@ class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManage
     {
         _debugAction.Dispose();
         _debugInput.Dispose();
-        _debugClassDefinitions.Dispose();
         _debugAddon.Dispose();
         //_debugVfx.Dispose();
         base.Dispose(disposing);
@@ -87,6 +85,11 @@ class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManage
         {
             _debugAutorot.Draw();
         }
+        if (ImGui.CollapsingHeader("Solo duty module"))
+        {
+            if (zmm.ActiveModule is QuestBattle.QuestBattle qb)
+                qb.DrawDebugInfo();
+        }
         if (ImGui.CollapsingHeader("Graphics scene"))
         {
             _debugGraphics.DrawSceneTree();
@@ -131,10 +134,6 @@ class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManage
         {
             _debugInput.Draw();
         }
-        if (ImGui.CollapsingHeader("Class definitions"))
-        {
-            _debugClassDefinitions.Draw();
-        }
         if (ImGui.CollapsingHeader("Player attributes"))
         {
             DrawPlayerAttributes();
@@ -177,7 +176,7 @@ class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManage
                     foreach (var status in chara.StatusList)
                     {
                         var src = status.SourceObject != null ? Utils.ObjectString(status.SourceObject) : "none";
-                        ImGui.TextUnformatted($"{status.StatusId} '{status.GameData.Name}': param={status.Param}, stacks={status.StackCount}, time={status.RemainingTime:f2}, source={src}");
+                        ImGui.TextUnformatted($"{status.StatusId} '{status.GameData.Value.Name}': param={status.Param}, stacks={status.StackCount}, time={status.RemainingTime:f2}, source={src}");
                     }
                 }
                 ImGui.TreePop();
@@ -267,14 +266,14 @@ class MainDebugWindow(WorldState ws, RotationModuleManager autorot, ActionManage
 
         var uiState = UIState.Instance();
         var level = (uint)uiState->PlayerState.CurrentLevel;
-        var paramGrow = Service.LuminaRow<Lumina.Excel.GeneratedSheets.ParamGrow>(level);
+        var paramGrow = Service.LuminaRow<Lumina.Excel.Sheets.ParamGrow>(level);
         if (paramGrow != null)
         {
-            ImGui.TextUnformatted($"Level: {level}, baseSpeed={paramGrow.BaseSpeed}, levelMod={paramGrow.LevelModifier}");
+            ImGui.TextUnformatted($"Level: {level}, baseSpeed={paramGrow.Value.BaseSpeed}, levelMod={paramGrow.Value.LevelModifier}");
             var sksValue = uiState->PlayerState.Attributes[45];
             var spsValue = uiState->PlayerState.Attributes[46];
-            var sksMod = 130 * (paramGrow.BaseSpeed - sksValue) / paramGrow.LevelModifier + 1000;
-            var spsMod = 130 * (paramGrow.BaseSpeed - spsValue) / paramGrow.LevelModifier + 1000;
+            var sksMod = 130 * (paramGrow.Value.BaseSpeed - sksValue) / paramGrow.Value.LevelModifier + 1000;
+            var spsMod = 130 * (paramGrow.Value.BaseSpeed - spsValue) / paramGrow.Value.LevelModifier + 1000;
             var hasteValue = uiState->PlayerState.Attributes[47];
             ImGui.TextUnformatted($"SKS: value={sksValue}, mod={sksMod}, gcd={2500 * sksMod / 1000}");
             ImGui.TextUnformatted($"SPS: value={spsValue}, mod={spsMod}, gcd={2500 * spsMod / 1000}");
