@@ -62,9 +62,10 @@ class AbilityInfo : CommonEnumInfo
             _plot.TickAdvance = new(45, 5);
             foreach (var i in infos)
             {
+                var cast = i.Action.Source.Casts.LastOrDefault(c => c.ID == i.Action.ID && c.Time.Start < i.Action.Timestamp);
                 var sourcePosRot = i.Action.Source.PosRotAt(i.Action.Timestamp);
                 var sourcePos = new WPos(sourcePosRot.XZ());
-                var targetPos = new WPos(i.Action.TargetPos.XZ());
+                var targetPos = new WPos((cast?.Location ?? i.Action.TargetPos).XZ());
                 if (targetPos == sourcePos && i.Action.Targets.Count > 0)
                     targetPos = new(i.Action.Targets[0].Target.PosRotAt(i.Action.Timestamp).XZ());
                 var origin = targeting != Targeting.TargetPosSourceRot ? sourcePos : targetPos;
@@ -415,7 +416,7 @@ class AbilityInfo : CommonEnumInfo
                     tree.LeafNode($"Effect range: {row?.EffectRange}");
                     tree.LeafNode($"Effect width: {row?.XAxisModifier}");
                     tree.LeafNode($"Omen: {row?.Omen.ValueNullable?.Path} / {row?.Omen.ValueNullable?.PathAlly}");
-                    var omenAlt = row != null ? Service.LuminaRow<Lumina.Excel.Sheets.Omen>(row.Value.Unknown0) : null;
+                    var omenAlt = row != null ? Service.LuminaRow<Lumina.Excel.Sheets.Omen>(row.Value.OmenAlt.RowId) : null;
                     tree.LeafNode($"Omen alt: {omenAlt?.Path} / {omenAlt?.PathAlly}");
                 }
             }

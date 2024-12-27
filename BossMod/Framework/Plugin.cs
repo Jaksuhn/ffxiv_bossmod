@@ -93,7 +93,7 @@ public sealed class Plugin : IDalamudPlugin
         _wndReplay = new(_ws, _bossmod, _rotationDB, replayDir);
         _wndRotation = new(_rotation, _amex, () => OpenConfigUI("Autorotation Presets"));
         _wndAI = new(_ai);
-        _wndDebug = new(_ws, _rotation, _zonemod, _amex, _hintsBuilder, dalamud);
+        _wndDebug = new(_ws, _rotation, _zonemod, _amex, _movementOverride, _hintsBuilder, dalamud);
 
         dalamud.UiBuilder.DisableAutomaticUiHide = true;
         dalamud.UiBuilder.Draw += DrawUI;
@@ -290,8 +290,9 @@ public sealed class Plugin : IDalamudPlugin
     private unsafe void ExecuteHints()
     {
         _movementOverride.DesiredDirection = _hints.ForcedMovement;
+        _movementOverride.MisdirectionThreshold = _hints.MisdirectionThreshold;
         // update forced target, if needed (TODO: move outside maybe?)
-        if (_hints.ForcedTarget != null)
+        if (_hints.ForcedTarget != null && _hints.ForcedTarget.IsTargetable)
         {
             var obj = _hints.ForcedTarget.SpawnIndex >= 0 ? FFXIVClientStructs.FFXIV.Client.Game.Object.GameObjectManager.Instance()->Objects.IndexSorted[_hints.ForcedTarget.SpawnIndex].Value : null;
             if (obj != null && obj->EntityId != _hints.ForcedTarget.InstanceID)

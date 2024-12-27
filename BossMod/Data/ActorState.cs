@@ -52,7 +52,7 @@ public sealed class ActorState : IEnumerable<Actor>
         {
             act.PrevPosRot = act.PosRot;
             if (act.CastInfo != null)
-                act.CastInfo.ElapsedTime += dt;
+                act.CastInfo.ElapsedTime = Math.Min(act.CastInfo.ElapsedTime + dt, act.CastInfo.AdjustedTotalTime);
         }
     }
 
@@ -372,11 +372,11 @@ public sealed class ActorState : IEnumerable<Actor>
     }
 
     // TODO: this should really be an actor field, but I have no idea what triggers icon clear...
-    public Event<Actor, uint> IconAppeared = new();
-    public sealed record class OpIcon(ulong InstanceID, uint IconID) : Operation(InstanceID)
+    public Event<Actor, uint, ulong> IconAppeared = new();
+    public sealed record class OpIcon(ulong InstanceID, uint IconID, ulong TargetID) : Operation(InstanceID)
     {
-        protected override void ExecActor(WorldState ws, Actor actor) => ws.Actors.IconAppeared.Fire(actor, IconID);
-        public override void Write(ReplayRecorder.Output output) => output.EmitFourCC("ICON"u8).EmitActor(InstanceID).Emit(IconID);
+        protected override void ExecActor(WorldState ws, Actor actor) => ws.Actors.IconAppeared.Fire(actor, IconID, TargetID);
+        public override void Write(ReplayRecorder.Output output) => output.EmitFourCC("ICON"u8).EmitActor(InstanceID).Emit(IconID).EmitActor(TargetID);
     }
 
     // TODO: this should be an actor field (?)

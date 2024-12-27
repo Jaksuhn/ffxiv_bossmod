@@ -42,6 +42,7 @@ public sealed record class ActorCastInfo
     public float RemainingTime => TotalTime - ElapsedTime;
     public float NPCTotalTime => TotalTime + NPCFinishDelay;
     public float NPCRemainingTime => NPCTotalTime - ElapsedTime;
+    public float AdjustedTotalTime => TotalTime + Action.CastTimeExtra();
 
     public bool IsSpell() => Action.Type == ActionType.Spell;
     public bool IsSpell<AID>(AID aid) where AID : Enum => Action == ActionID.MakeSpell(aid);
@@ -104,6 +105,7 @@ public sealed class Actor(ulong instanceID, uint oid, int spawnIndex, string nam
     public ClassCategory ClassCategory => Class.GetClassCategory();
     public WPos Position => new(PosRot.X, PosRot.Z);
     public WPos PrevPosition => new(PrevPosRot.X, PrevPosRot.Z);
+    public WDir LastFrameMovement => Position - PrevPosition;
     public Angle Rotation => PosRot.W.Radians();
     public bool Omnidirectional => Utils.CharacterIsOmnidirectional(OID);
     public bool IsDeadOrDestroyed => IsDead || IsDestroyed;
