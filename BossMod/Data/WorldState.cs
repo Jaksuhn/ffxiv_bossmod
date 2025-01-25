@@ -17,7 +17,6 @@ public sealed class WorldState
     public readonly PartyState Party;
     public readonly ClientState Client = new();
     public readonly NetworkState Network = new();
-    public readonly PendingEffects PendingEffects = new();
 
     public DateTime CurrentTime => Frame.Timestamp;
     public DateTime FutureTime(float deltaSeconds) => Frame.Timestamp.AddSeconds(deltaSeconds);
@@ -82,7 +81,7 @@ public sealed class WorldState
             ws.Client.CameraAzimuth = CameraAzimuth;
             ws.Client.GaugePayload = GaugePayload;
             ws.Client.Tick(Frame.Duration);
-            ws.Actors.Tick(Frame.Duration);
+            ws.Actors.Tick(Frame);
             ws.FrameStarted.Fire(this);
         }
         public override void Write(ReplayRecorder.Output output) => output.EmitFourCC("FRAM"u8)
@@ -142,5 +141,20 @@ public sealed class WorldState
     {
         protected override void Exec(WorldState ws) => ws.EnvControl.Fire(this);
         public override void Write(ReplayRecorder.Output output) => output.EmitFourCC("ENVC"u8).Emit(Index, "X2").Emit(State, "X8");
+    }
+
+    public Event<OpSystemLogMessage> SystemLogMessage = new();
+    public sealed record class OpSystemLogMessage(uint MessageId, int[] Args) : Operation
+    {
+        public readonly int[] Args = Args;
+
+        protected override void Exec(WorldState ws) => ws.SystemLogMessage.Fire(this);
+        public override void Write(ReplayRecorder.Output output)
+        {
+            output.EmitFourCC("SLOG"u8).Emit(MessageId);
+            output.Emit(Args.Length);
+            foreach (var arg in Args)
+                output.Emit(arg);
+        }
     }
 }

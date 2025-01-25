@@ -35,9 +35,6 @@ sealed class WorldStateGameSync : IDisposable
     private readonly Dictionary<ulong, Vector3> _lastCastPositions = []; // unfortunately, game only saves cast location for area-targeted spells
     private readonly Actor?[] _actorsByIndex = new Actor?[ObjectTableSize];
 
-    private readonly List<(ulong Caster, ActorCastEvent Event)> _castEvents = [];
-    private readonly List<(uint Seq, ulong Target, int TargetIndex)> _confirms = [];
-
     private readonly Network.OpcodeMap _opcodeMap = new();
     private readonly Network.PacketInterceptor _interceptor = new();
     private readonly Network.PacketDecoderGame _decoder = new();
@@ -63,6 +60,12 @@ sealed class WorldStateGameSync : IDisposable
 
     private unsafe delegate void ProcessPacketRSVDataDelegate(byte* packet);
     private readonly Hook<ProcessPacketRSVDataDelegate> _processPacketRSVDataHook;
+
+    private unsafe delegate void ProcessPacketOpenTreasureDelegate(uint actorID, byte* packet);
+    private readonly Hook<ProcessPacketOpenTreasureDelegate> _processPacketOpenTreasureHook;
+
+    private unsafe delegate void* ProcessSystemLogMessageDelegate(uint entityId, uint logMessageId, int* args, byte argCount);
+    private readonly Hook<ProcessSystemLogMessageDelegate> _processSystemLogMessageHook;
 
     public unsafe WorldStateGameSync(WorldState ws, ActionManagerEx amex)
     {
@@ -112,6 +115,14 @@ sealed class WorldStateGameSync : IDisposable
         _processPacketRSVDataHook = Service.Hook.HookFromSignature<ProcessPacketRSVDataDelegate>("44 8B 09 4C 8D 41 34", ProcessPacketRSVDataDetour);
         _processPacketRSVDataHook.Enable();
         Service.Log($"[WSG] ProcessPacketRSVData address = 0x{_processPacketRSVDataHook.Address:X}");
+
+        _processSystemLogMessageHook = Service.Hook.HookFromSignature<ProcessSystemLogMessageDelegate>("E8 ?? ?? ?? ?? E9 ?? ?? ?? ?? 0F B6 43 28", ProcessSystemLogMessageDetour);
+        _processSystemLogMessageHook.Enable();
+        Service.Log($"[WSG] ProcessSystemLogMessage address = 0x{_processSystemLogMessageHook:X}");
+
+        _processPacketOpenTreasureHook = Service.Hook.HookFromSignature<ProcessPacketOpenTreasureDelegate>("40 53 48 83 EC 20 48 8B DA 48 8D 0D ?? ?? ?? ?? 8B 52 10 E8 ?? ?? ?? ?? 48 85 C0 74 1B", ProcessPacketOpenTreasureDetour);
+        _processPacketOpenTreasureHook.Enable();
+        Service.Log($"[WSG] ProcessPacketOpenTreasure address = 0x{_processPacketOpenTreasureHook.Address:X}");
     }
 
     public void Dispose()
@@ -123,6 +134,8 @@ sealed class WorldStateGameSync : IDisposable
         _processPacketNpcYellHook.Dispose();
         _processEnvControlHook.Dispose();
         _processPacketRSVDataHook.Dispose();
+        _processSystemLogMessageHook.Dispose();
+        _processPacketOpenTreasureHook.Dispose();
         _subscriptions.Dispose();
         _netConfig.Dispose();
         _interceptor.Dispose();
@@ -153,14 +166,6 @@ sealed class WorldStateGameSync : IDisposable
         {
             _ws.Execute(new NetworkState.OpIDScramble(Network.IDScramble.Delta));
         }
-
-        foreach (var c in _confirms)
-            _ws.PendingEffects.Confirm(_ws.CurrentTime, c.Seq, c.Target, c.TargetIndex);
-        _confirms.Clear();
-        _ws.PendingEffects.RemoveExpired(_ws.CurrentTime);
-        foreach (var c in _castEvents)
-            _ws.PendingEffects.AddEntry(_ws.CurrentTime, c.Caster, c.Event);
-        _castEvents.Clear();
 
         foreach (var op in _globalOps)
         {
@@ -347,6 +352,23 @@ sealed class WorldStateGameSync : IDisposable
                 UpdateActorStatus(act, i, curStatus);
             }
         }
+
+        var aeh = chr != null ? chr->GetActionEffectHandler() : null;
+        if (aeh != null)
+        {
+            for (int i = 0; i < aeh->IncomingEffects.Length; ++i)
+            {
+                ref var eff = ref aeh->IncomingEffects[i];
+                ref var prev = ref act.IncomingEffects[i];
+                if ((prev.GlobalSequence, prev.TargetIndex) != (eff.GlobalSequence != 0 ? (eff.GlobalSequence, eff.TargetIndex) : (0, 0)))
+                {
+                    var effects = new ActionEffects();
+                    for (int j = 0; j < ActionEffects.MaxCount; ++j)
+                        effects[j] = *(ulong*)eff.Effects.Effects.GetPointer(j);
+                    _ws.Execute(new ActorState.OpIncomingEffect(act.InstanceID, i, new(eff.GlobalSequence, eff.TargetIndex, eff.Source, new((ActionType)eff.ActionType, eff.ActionId), effects)));
+                }
+            }
+        }
     }
 
     private void UpdateActorCastInfo(Actor act, ActorCastInfo? cast)
@@ -512,16 +534,19 @@ sealed class WorldStateGameSync : IDisposable
 
     private unsafe void UpdatePartyNPCs()
     {
+        var treatAlliesAsParty = _ws.CurrentCFCID != 0; // TODO: think more about it, do we ever care about allies in overworld?..
         for (int i = PartyState.MaxAllianceSize; i < PartyState.MaxAllies; ++i)
         {
             ref var m = ref _ws.Party.Members[i];
             if (m.InstanceId != 0)
             {
-                var actor = _ws.Actors.Find(m.InstanceId);
-                if (!(actor?.IsFriendlyNPC ?? false))
+                var actor = treatAlliesAsParty ? _ws.Actors.Find(m.InstanceId) : null;
+                if (actor == null || !actor.IsFriendlyNPC)
                     UpdatePartySlot(i, PartyState.EmptySlot);
             }
         }
+        if (!treatAlliesAsParty)
+            return;
         foreach (var actor in _ws.Actors)
         {
             if (!actor.IsFriendlyNPC)
@@ -705,13 +730,11 @@ sealed class WorldStateGameSync : IDisposable
     private void OnActionEffect(ulong casterID, ActorCastEvent info)
     {
         _actorOps.GetOrAdd(casterID).Add(new ActorState.OpCastEvent(casterID, info));
-        _castEvents.Add((casterID, info));
     }
 
     private void OnEffectResult(ulong targetID, uint seq, int targetIndex)
     {
         _actorOps.GetOrAdd(targetID).Add(new ActorState.OpEffectResult(targetID, seq, targetIndex));
-        _confirms.Add((seq, targetID, targetIndex));
     }
 
     private unsafe void ProcessPacketActorCastDetour(uint casterId, Network.ServerIPC.ActorCast* packet)
@@ -795,5 +818,18 @@ sealed class WorldStateGameSync : IDisposable
     {
         _processPacketRSVDataHook.Original(packet);
         _globalOps.Add(new WorldState.OpRSVData(MemoryHelper.ReadStringNullTerminated((nint)(packet + 4)), MemoryHelper.ReadString((nint)(packet + 0x34), *(int*)packet)));
+    }
+
+    private unsafe void ProcessPacketOpenTreasureDetour(uint actorID, byte* packet)
+    {
+        _processPacketOpenTreasureHook.Original(actorID, packet);
+        _actorOps.GetOrAdd(actorID).Add(new ActorState.OpEventOpenTreasure(actorID));
+    }
+
+    private unsafe void* ProcessSystemLogMessageDetour(uint entityId, uint messageId, int* args, byte argCount)
+    {
+        var res = _processSystemLogMessageHook.Original(entityId, messageId, args, argCount);
+        _globalOps.Add(new WorldState.OpSystemLogMessage(messageId, new Span<int>(args, argCount).ToArray()));
+        return res;
     }
 }

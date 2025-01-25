@@ -1,6 +1,5 @@
 ﻿namespace BossMod.Dawntrail.Ultimate.FRU;
 
-// TODO: hints etc...
 class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, default)
 {
     public struct PlayerState
@@ -8,7 +7,8 @@ class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, d
         public int FireOrder;
         public int RewindOrder;
         public int LaserOrder;
-        public bool HaveDark;
+        public bool HaveDarkEruption; // all dark eruptions have rewind order 1
+        public bool HaveDarkBlizzard;
         public WDir AssignedDir;
         public WPos ReturnPos;
     }
@@ -19,7 +19,15 @@ class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, d
     private readonly FRUConfig _config = Service.Config.Get<FRUConfig>();
     private WDir _relNorth;
     private int _numYellowTethers;
-    private DateTime _nextProgress;
+    private DateTime _nextImminent = module.WorldState.FutureTime(21.9f - 2.5f); // approx 2.5s before next step resolves
+
+    public const float RangeHintOut = 12; // explosion radius is 8
+    public const float RangeHintStack = 1;
+    public const float RangeHintLaser = 9.5f; // hourglass location
+    public const float RangeHintDarkEruption = 9; // radius is 6, especially for fire-order 2 has to be < 9.5, otherwise will be clipped by own laser
+    public const float RangeHintDarkWater = 1;
+    public const float RangeHintEye = 2;
+    public const float RangeHintChill = -1; // simplifies looking outside and hitting boss
 
     public Angle LaserRotationAt(WPos pos) => LaserRotations.FirstOrDefault(r => r.origin.Position.AlmostEqual(pos, 1)).rotation;
 
@@ -33,15 +41,56 @@ class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, d
         hints.Add(hint, false);
     }
 
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints)
+    {
+        if (States[slot].AssignedDir != default)
+        {
+            var range = RangeHint(States[slot], actor.Class.IsSupport(), NumCasts);
+            switch (range)
+            {
+                case RangeHintOut:
+                    if (WorldState.CurrentTime < _nextImminent)
+                    {
+                        // there's still time, around maxmelee at assigned direction
+                        hints.AddForbiddenZone(ShapeDistance.InvertedCircle(SafeSpot(slot, 9), 1), _nextImminent);
+                    }
+                    else
+                    {
+                        // ok, out is imminent, gtfo - we need to avoid clipping people, avoid dark blizzard (if it's being resolved now), and avoid lasers (if any)
+                        var avoidBlizzard = NumCasts == 2;
+                        foreach (var (i, p) in Raid.WithSlot().Exclude(slot))
+                        {
+                            var avoidRadius = avoidBlizzard && States[i].HaveDarkBlizzard ? 12 : 8;
+                            hints.AddForbiddenZone(ShapeDistance.Circle(p.Position, avoidRadius));
+                        }
+                        var lasers = Module.FindComponent<P3UltimateRelativitySinboundMeltdownAOE>();
+                        if (lasers != null)
+                            foreach (var laser in lasers.ActiveAOEs(slot, actor))
+                                hints.AddForbiddenZone(laser.Shape.Distance(laser.Origin, laser.Rotation), laser.Activation);
+                    }
+                    break;
+                case RangeHintLaser:
+                case RangeHintDarkEruption:
+                case RangeHintEye:
+                    // go to exact safespot
+                    hints.AddForbiddenZone(ShapeDistance.PrecisePosition(SafeSpot(slot, range), new(0, 1), Module.Bounds.MapResolution, actor.Position, 0.1f), _nextImminent);
+                    break;
+                default:
+                    // go to mid, staying as tightly as possible to allow for better uptime; after all mechanics, go opposite to dodge eyes more naturally
+                    var dest = NumCasts >= 6 ? SafeSpot(slot, range) : Module.Center;
+                    hints.AddForbiddenZone(ShapeDistance.PrecisePosition(dest, new(0, 1), Module.Bounds.MapResolution, actor.Position, 0.1f), _nextImminent);
+                    break;
+            }
+        }
+    }
+
     public override void DrawArenaForeground(int pcSlot, Actor pc)
     {
         var assignedDir = States[pcSlot].AssignedDir;
         if (assignedDir != default && NumCasts < 6)
         {
-            var safespot = Module.Center + RangeHint(States[pcSlot], pc.Class.IsSupport(), NumCasts) * assignedDir;
-            if (IsBaitingLaser(States[pcSlot], NumCasts) && LaserRotationAt(safespot) is var rot && rot != default)
-                safespot += 2 * (Angle.FromDirection(assignedDir) - 4.5f * rot).ToDirection();
-            Arena.AddCircle(safespot, 1, ArenaColor.Safe);
+            Arena.AddLine(Module.Center, Module.Center + Module.Bounds.Radius * assignedDir, ArenaColor.Safe);
+            Arena.AddCircle(SafeSpot(pcSlot, RangeHint(States[pcSlot], pc.Class.IsSupport(), NumCasts)), 1, ArenaColor.Safe);
         }
     }
 
@@ -71,12 +120,15 @@ class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, d
             case SID.SpellInWaitingDarkBlizzard:
                 slot = Raid.FindSlot(actor.InstanceID);
                 if (slot >= 0)
+                {
                     States[slot].LaserOrder = actor.Class.IsSupport() ? 2 : 1;
+                    States[slot].HaveDarkBlizzard = true;
+                }
                 break;
             case SID.SpellInWaitingDarkEruption:
                 slot = Raid.FindSlot(actor.InstanceID);
                 if (slot >= 0)
-                    States[slot].HaveDark = true;
+                    States[slot].HaveDarkEruption = true;
                 break;
             case SID.SpellInWaitingReturn:
                 slot = Raid.FindSlot(actor.InstanceID);
@@ -128,10 +180,10 @@ class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, d
 
     public override void OnEventCast(Actor caster, ActorCastEvent spell)
     {
-        if ((AID)spell.Action.ID is AID.UltimateRelativityUnholyDarkness or AID.UltimateRelativitySinboundMeltdownAOEFirst && WorldState.CurrentTime > _nextProgress)
+        if ((AID)spell.Action.ID is AID.UltimateRelativityUnholyDarkness or AID.UltimateRelativitySinboundMeltdownAOEFirst && WorldState.CurrentTime > _nextImminent)
         {
             ++NumCasts;
-            _nextProgress = WorldState.FutureTime(1);
+            _nextImminent = WorldState.FutureTime(2.5f);
         }
     }
 
@@ -196,30 +248,40 @@ class P3UltimateRelativity(BossModule module) : Components.CastCounter(module, d
 
     private float RangeHint(in PlayerState state, bool isSupport, int order) => order switch
     {
-        0 => state.FireOrder == 1 ? 12 : 5,
-        1 => state.LaserOrder == 1 || state.HaveDark ? 9.5f : 1,
-        2 => state.FireOrder == 2 ? 12 : 1,
-        3 => state.LaserOrder == 2 ? 9.5f : 2,
-        4 => state.FireOrder == 3 ? 12 : 1,
-        5 => state.LaserOrder == 3 ? 9.5f : 5,
-        _ => 9.5f
+        0 => state.FireOrder == 1 ? RangeHintOut : RangeHintStack,
+        1 => state.LaserOrder == 1 ? RangeHintLaser : state.HaveDarkEruption ? RangeHintDarkEruption : RangeHintDarkWater,
+        2 => state.FireOrder == 2 ? RangeHintOut : RangeHintStack,
+        3 => state.LaserOrder == 2 ? RangeHintLaser : state.RewindOrder == 2 ? RangeHintEye : RangeHintChill,
+        4 => state.FireOrder == 3 ? RangeHintOut : RangeHintStack,
+        5 => state.LaserOrder == 3 ? RangeHintLaser : RangeHintChill,
+        _ => RangeHintChill
     };
 
-    // TODO: rethink this...
     private string Hint(in PlayerState state, bool isSupport, int order) => order switch
     {
         0 => state.FireOrder == 1 ? "Out" : "Stack", // 10s
-        1 => state.LaserOrder == 1 ? "Laser" : state.HaveDark ? "Hourglass" : "Mid", // 15s
+        1 => state.LaserOrder == 1 ? "Laser" : state.HaveDarkEruption ? "Hourglass" : "Mid", // 15s - at this point everyone either baits laser or does rewind (eruption or water)
         2 => state.FireOrder == 2 ? "Out" : "Stack", // 20s
-        3 => state.LaserOrder == 2 ? "Laser" : state.HaveDark ? "Hourglass" : "Mid", // 25s
+        3 => state.LaserOrder == 2 ? "Laser" : state.RewindOrder == 2 ? "Mid" : "Chill", // 25s - at this point people bait lasers, rewind eyes or chill
         4 => state.FireOrder == 3 ? "Out" : "Stack", // 30s
-        5 => state.LaserOrder == 3 ? "Laser" : "Mid", // 35s
+        5 => state.LaserOrder == 3 ? "Laser" : "Chill", // 35s
         _ => "Look out"
     };
+
+    private WPos SafeSpot(int slot, float range)
+    {
+        var assignedDir = States[slot].AssignedDir;
+        var safespot = Module.Center + range * assignedDir;
+        if (IsBaitingLaser(States[slot], NumCasts) && LaserRotationAt(safespot) is var rot && rot != default)
+            safespot += 1.5f * (Angle.FromDirection(assignedDir) - 4.5f * rot).ToDirection();
+        return safespot;
+    }
 }
 
 class P3UltimateRelativityDarkFireUnholyDarkness(BossModule module) : Components.UniformStackSpread(module, 6, 8, 5, alwaysShowSpreads: true)
 {
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints) { } // handled by main component
+
     public override void OnStatusGain(Actor actor, ActorStatus status)
     {
         switch ((SID)status.ID)
@@ -276,18 +338,30 @@ class P3UltimateRelativitySinboundMeltdownBait(BossModule module) : Components.G
             hints.Add("GTFO from baited aoe!");
     }
 
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints) { } // handled by main component
+
     public override void DrawArenaForeground(int pcSlot, Actor pc)
     {
-        base.DrawArenaForeground(pcSlot, pc);
-
-        foreach (ref var b in CurrentBaits.AsSpan())
+        foreach (var bait in ActiveBaitsOn(pc))
         {
-            if (b.Target == pc && b.Source.Position.AlmostEqual(AssignedHourglass(pcSlot), 1) && _rel != null)
+            if (bait.Source.Position.AlmostEqual(AssignedHourglass(pcSlot), 1) && _rel != null)
             {
                 // draw extra rotation hints for correctly baited hourglass
-                var rot = _rel.LaserRotationAt(b.Source.Position);
-                for (int i = 1; i < 10; ++i)
-                    _shape.Outline(Arena, b.Source.Position, b.Rotation + i * rot);
+                // note: we don't want to draw 'short' edges of the rectangle (farther one is far outside arena bounds anyway, and closer one messes visualization up too much
+                var rot = _rel.LaserRotationAt(bait.Source.Position);
+                for (int i = 0; i < 10; ++i)
+                {
+                    var dir = (bait.Rotation + i * rot).ToDirection();
+                    var side = _shape.HalfWidth * dir.OrthoR();
+                    var end = bait.Source.Position + _shape.LengthFront * dir;
+                    Arena.AddLine(bait.Source.Position + side, end + side, ArenaColor.Danger);
+                    Arena.AddLine(bait.Source.Position - side, end - side, ArenaColor.Danger);
+                }
+            }
+            else
+            {
+                // just draw default hint
+                bait.Shape.Outline(Arena, bait.Source.Position, bait.Rotation);
             }
         }
     }
@@ -312,6 +386,8 @@ class P3UltimateRelativitySinboundMeltdownAOE(BossModule module) : Components.Ge
 
     public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor) => _aoes;
 
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints) { } // handled by main component
+
     public override void OnEventCast(Actor caster, ActorCastEvent spell)
     {
         switch ((AID)spell.Action.ID)
@@ -333,22 +409,20 @@ class P3UltimateRelativitySinboundMeltdownAOE(BossModule module) : Components.Ge
 
 class P3UltimateRelativityDarkBlizzard(BossModule module) : Components.GenericAOEs(module, ActionID.MakeSpell(AID.UltimateRelativityDarkBlizzard))
 {
-    private Actor? _source;
+    private readonly List<Actor> _sources = [];
     private DateTime _activation;
 
-    private static readonly AOEShapeDonut _shape = new(2, 12); // TODO: verify inner radius
+    private static readonly AOEShapeDonut _shape = new(3, 12); // TODO: verify inner radius
 
-    public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor)
-    {
-        if (_source != null)
-            yield return new(_shape, _source.Position, default, _activation);
-    }
+    public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor) => _sources.Select(s => new AOEInstance(_shape, s.Position, default, _activation));
+
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints) { } // handled by main component
 
     public override void OnStatusGain(Actor actor, ActorStatus status)
     {
         if ((SID)status.ID == SID.SpellInWaitingDarkBlizzard)
         {
-            _source = actor;
+            _sources.Add(actor);
             _activation = status.ExpireAt;
         }
     }

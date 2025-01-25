@@ -26,6 +26,7 @@ public class ArcList(WPos center, float radius)
         if (min.Rad < -MathF.PI)
         {
             Forbidden.Add(min.Rad + 2 * MathF.PI, MathF.PI);
+            min = -MathF.PI.Radians();
         }
         var max = center + halfWidth;
         if (max.Rad > MathF.PI)
@@ -43,8 +44,18 @@ public class ArcList(WPos center, float radius)
         var cos = (oo.LengthSq() + Radius * Radius - radius * radius) / (2 * oo.Length() * Radius);
         if (cos is <= 1 and >= -1)
         {
-            var halfWidth = MathF.Acos(cos);
-            ForbidArcByLength(center, halfWidth.Radians());
+            ForbidArcByLength(center, Angle.Acos(cos));
+        }
+    }
+
+    public void ForbidInverseCircle(WPos origin, float radius)
+    {
+        var oo = origin - Center;
+        var center = Angle.FromDirection(oo);
+        var cos = (oo.LengthSq() + Radius * Radius - radius * radius) / (2 * oo.Length() * Radius);
+        if (cos is <= 1 and >= -1)
+        {
+            ForbidArcByLength((center + 180.Degrees()).Normalized(), Angle.Acos(-cos));
         }
     }
 
@@ -57,6 +68,13 @@ public class ArcList(WPos center, float radius)
         var i2 = IntersectLine(o2, direction);
         ForbidArc(i1.Item1, i2.Item1);
         ForbidArc(i2.Item2, i1.Item2);
+    }
+
+    public void ForbidInfiniteCone(WPos origin, Angle dir, Angle halfAngle)
+    {
+        var min = IntersectLine(origin, (dir - halfAngle).ToDirection()).Item2;
+        var max = IntersectLine(origin, (dir + halfAngle).ToDirection()).Item2;
+        ForbidArc(min, max);
     }
 
     public IEnumerable<(Angle min, Angle max)> Allowed(Angle cushion)

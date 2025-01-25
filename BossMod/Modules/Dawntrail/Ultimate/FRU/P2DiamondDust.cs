@@ -126,7 +126,10 @@ class P2DiamondDustSafespots(BossModule module) : BossComponent(module)
     public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints)
     {
         if (_safeOffs[slot] != default)
+        {
+            hints.PathfindMapBounds = FRU.PathfindHugBorderBounds;
             hints.AddForbiddenZone(ShapeDistance.PrecisePosition(Module.Center + _safeOffs[slot], new WDir(0, 1), Module.Bounds.MapResolution, actor.Position, 0.1f));
+        }
     }
 
     public override void DrawArenaForeground(int pcSlot, Actor pc)
@@ -250,6 +253,7 @@ class P2SinboundHoly(BossModule module) : Components.UniformStackSpread(module, 
     public int NumCasts;
     private DateTime _nextExplosion;
     private readonly WDir _destinationDir = CalculateDestination(module);
+    private readonly WPos[] _initialSpots = new WPos[PartyState.MaxPartySize];
 
     private static WDir CalculateDestination(BossModule module)
     {
@@ -276,11 +280,29 @@ class P2SinboundHoly(BossModule module) : Components.UniformStackSpread(module, 
         if (master != null && ((master.Position - actor.Position).LengthSq() > 100 || (master.Position - Module.Center).LengthSq() < 196))
             master = null; // our closest healer is too far away or too close to center, something is wrong (maybe kb didn't finish yet, or healer fucked up)
 
+        // determine movement speed and direction
+        // baseline is towards safety (opposite boss), or CW (arbitrary) if there's no obvious safe direction
+        // however, if we're non-healer, it is overridden by healer's decision (we can slide over later)
+        var moveQuickly = _destinationDir == default;
+        var preferredDir = !moveQuickly ? _destinationDir : (actor.Position - Module.Center).Normalized().OrthoR();
+        moveQuickly &= NumCasts > 0; // don't start moving while waiting for first cast
+
         if (master != null)
         {
+            var masterSlot = Raid.FindSlot(master.InstanceID);
+            if (masterSlot >= 0 && NumCasts > 0)
+            {
+                var masterMovement = preferredDir.Dot(master.Position - _initialSpots[masterSlot]);
+                if (masterMovement < -2)
+                    preferredDir = -preferredDir; // swap movement direction to follow healer
+            }
+
+            moveQuickly &= (actor.Position - master.Position).LengthSq() < 25; // don't move too quickly if healer can't catch up
+
             // non-healers should just stack with whatever closest healer is
-            var moveDir = master.LastFrameMovement.Normalized();
-            var capsule = ShapeDistance.Capsule(master.Position + 2 * moveDir, moveDir, 4, 2);
+            // before first cast, ignore master's movements
+            var moveDir = NumCasts > 0 ? master.LastFrameMovement.Normalized() : default;
+            var capsule = ShapeDistance.Capsule(master.Position + 2 * moveDir, moveDir, 4, 1.5f);
             hints.AddForbiddenZone(p => -capsule(p), DateTime.MaxValue);
         }
 
@@ -292,9 +314,7 @@ class P2SinboundHoly(BossModule module) : Components.UniformStackSpread(module, 
         hints.AddForbiddenZone(ShapeDistance.Circle(Module.Center, 16), hintTime);
 
         // prefer moving towards safety (CW is arbitrary)
-        var moveQuickly = _destinationDir == default;
-        var preferredDir = !moveQuickly ? _destinationDir : (actor.Position - Module.Center).Normalized().OrthoR();
-        var planeOffset = moveQuickly && master == null && NumCasts > 0 ? 2 : -2; // if we're moving quickly, mark our current spot as forbidden (don't bother if we have master or waiting for first cast, though)
+        var planeOffset = moveQuickly ? 2 : -2; // if we're moving quickly, mark our current spot as forbidden
         hints.AddForbiddenZone(ShapeDistance.HalfPlane(Module.Center + planeOffset * preferredDir, preferredDir), hintTime);
     }
 
@@ -310,6 +330,10 @@ class P2SinboundHoly(BossModule module) : Components.UniformStackSpread(module, 
     {
         if ((AID)spell.Action.ID == AID.SinboundHolyAOE && WorldState.CurrentTime > _nextExplosion)
         {
+            if (NumCasts == 0)
+                foreach (var (i, p) in Raid.WithSlot())
+                    _initialSpots[i] = p.Position;
+
             ++NumCasts;
             _nextExplosion = WorldState.FutureTime(0.5f);
         }
@@ -344,6 +368,7 @@ class P2TwinStillnessSilence(BossModule module) : Components.GenericAOEs(module)
     public readonly List<AOEInstance> AOEs = [];
     private readonly Actor? _source = module.Enemies(OID.OraclesReflection).FirstOrDefault();
     private BitMask _thinIce;
+    private readonly WPos[] _slideBackPos = new WPos[PartyState.MaxPartySize]; // used for hints only
     private P2SinboundHolyVoidzone? _voidzones; // used for hints only
 
     private const float SlideDistance = 32;
@@ -356,6 +381,15 @@ class P2TwinStillnessSilence(BossModule module) : Components.GenericAOEs(module)
     }
 
     public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor) => AOEs.Take(1);
+
+    public override void Update()
+    {
+        if (AOEs.Count != 2)
+            return;
+        foreach (var (i, p) in Raid.WithSlot().IncludedInMask(_thinIce))
+            if (_slideBackPos[i] == default && p.LastFrameMovement != default)
+                _slideBackPos[i] = p.PrevPosition;
+    }
 
     public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints)
     {
@@ -392,33 +426,63 @@ class P2TwinStillnessSilence(BossModule module) : Components.GenericAOEs(module)
                 hints.AddForbiddenZone(ShapeDistance.Circle(Module.Center, 16), WorldState.FutureTime(50));
                 hints.AddForbiddenZone(ShapeDistance.InvertedCone(Module.Center, 100, desiredDir, halfWidth), DateTime.MaxValue);
             }
-            return;
         }
-
-        // at this point, we have thin ice, so we can either stay or move fixed distance
-        hints.AddForbiddenZone(ShapeDistance.Donut(actor.Position, 1, 31));
-        hints.AddForbiddenZone(ShapeDistance.InvertedCircle(actor.Position, 33));
-
-        if (AOEs.Count == 0)
+        else if (actor.LastFrameMovement == default)
         {
-            // if we're behind boss, slide over
-            hints.AddForbiddenZone(ShapeDistance.Rect(_source.Position, _source.Rotation, 20, 20, 20), DateTime.MaxValue);
-        }
-        else
-        {
-            // otherwise just dodge next aoe
-            ref var nextAOE = ref AOEs.Ref(0);
-            hints.AddForbiddenZone(nextAOE.Shape.Distance(nextAOE.Origin, nextAOE.Rotation), nextAOE.Activation);
-        }
+            // at this point, we have thin ice, so we can either stay or move fixed distance
+            var sourceOffset = _source.Position - Module.Center;
+            var needToMove = AOEs.Count > 0 ? AOEs[0].Check(actor.Position) : NumCasts == 0 && sourceOffset.Dot(actor.Position - Module.Center) > 0;
+            if (!needToMove)
+                return;
 
-        // ensure we don't slide over voidzones
-        foreach (var z in _voidzones.Sources(Module))
-        {
-            var offset = z.Position - actor.Position;
-            var dist = offset.Length();
-            if (dist > _voidzones.Shape.Radius)
-                hints.AddForbiddenZone(ShapeDistance.Cone(actor.Position, 100, Angle.FromDirection(offset), Angle.Asin(dist / _voidzones.Shape.Radius)));
+            var zoneList = new ArcList(actor.Position, SlideDistance);
+            zoneList.ForbidInverseCircle(Module.Center, Module.Bounds.Radius);
+
+            foreach (var z in _voidzones.Sources(Module))
+            {
+                var offset = z.Position - actor.Position;
+                var dist = offset.Length();
+                if (dist >= SlideDistance)
+                {
+                    // voidzone center is outside slide distance => forbid voidzone itself
+                    zoneList.ForbidCircle(z.Position, _voidzones.Shape.Radius);
+                }
+                else if (dist >= _voidzones.Shape.Radius)
+                {
+                    // forbid the voidzone's shadow
+                    zoneList.ForbidArcByLength(Angle.FromDirection(offset), Angle.Asin(_voidzones.Shape.Radius / dist));
+                }
+                // else: we're already in voidzone, oh well
+            }
+
+            if (AOEs.Count == 0)
+            {
+                // if we're behind boss, slide over to the safe point as opposite to the boss as possible
+                var farthestDir = Angle.FromDirection(-sourceOffset);
+                var bestRange = zoneList.Allowed(1.Degrees()).MinBy(r => farthestDir.Rad < r.min.Rad ? r.min.Rad - farthestDir.Rad : farthestDir.Rad > r.max.Rad ? farthestDir.Rad - r.max.Rad : 0);
+                var dir = farthestDir.Rad < bestRange.min.Rad ? bestRange.min : farthestDir.Rad > bestRange.max.Rad ? bestRange.max : farthestDir;
+                hints.AddForbiddenZone(ShapeDistance.InvertedCircle(actor.Position + SlideDistance * dir.ToDirection(), 1), DateTime.MaxValue);
+            }
+            else
+            {
+                // dodge next aoe
+                ref var nextAOE = ref AOEs.Ref(0);
+                zoneList.ForbidInfiniteCone(nextAOE.Origin, nextAOE.Rotation, ((AOEShapeCone)nextAOE.Shape).HalfAngle);
+
+                // prefer to return to the starting spot, for more natural preposition for next mechanic
+                if (AOEs.Count == 1 && _slideBackPos[slot] != default && !zoneList.Forbidden.Contains(Angle.FromDirection(_slideBackPos[slot] - actor.Position).Rad))
+                {
+                    hints.AddForbiddenZone(ShapeDistance.InvertedCircle(_slideBackPos[slot], 1), DateTime.MaxValue);
+                }
+                else if (zoneList.Allowed(1.Degrees()).MaxBy(r => (r.max - r.min).Rad) is var best && best.max.Rad > best.min.Rad)
+                {
+                    var dir = 0.5f * (best.min + best.max);
+                    hints.AddForbiddenZone(ShapeDistance.InvertedCircle(actor.Position + SlideDistance * dir.ToDirection(), 1), DateTime.MaxValue);
+                }
+                // else: no good direction can be found, wait for a bit, maybe voidzone will disappear
+            }
         }
+        // else: we are already sliding, nothing to do...
     }
 
     public override void DrawArenaForeground(int pcSlot, Actor pc)

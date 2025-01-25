@@ -30,10 +30,16 @@ public enum OID : uint
     UsurperOfFrostP4 = 0x45A9, // R6.125, x0 (spawn during fight)
     GreatWyrm = 0x45AA, // R3.500, x0 (spawn during fight), Part type
     OracleOfDarknessP4 = 0x45AB, // R7.040, x0 (spawn during fight)
+    DrachenWanderer = 0x45AC, // R1.000-2.000, x0 (spawn during fight), crystallize time dragon head
     SorrowsHourglass = 0x45AD, // R1.000, x0 (spawn during fight)
     FragmentOfFate = 0x45B1, // R3.500, x0 (spawn during fight)
     VisionOfRyne = 0x45B4, // R0.750, x0 (spawn during fight)
     VisionOfGaia = 0x45B5, // R1.500, x0 (spawn during fight)
+    DragonPuddle = 0x1EBD41, // R0.500, x0 (spawn during fight), EventObj type, puddle appears when head is touched
+    GuardianOfEden = 0x45AE, // R115.380, x0 (spawn during fight), p5 failure state tree
+
+    BossP5 = 0x45AF, // R7.000, x0 (spawn during fight)
+    FulgentBladeLine = 0x1EBBF7, // R0.500, x0 (spawn during fight), EventObj type
 }
 
 public enum AID : uint
@@ -206,7 +212,7 @@ public enum AID : uint
     DrachenArmor = 40186, // Helper->self, no cast, single-target, visual (wings appear)
     AutoAttackP4Wyrm = 40178, // GreatWyrm->player, no cast, single-target
     AutoAttackP4Usurper = 40177, // UsurperOfFrostP4->player, no cast, single-target
-    EdgeOfOblivion = 40174, // FragmentOfFate->self, 5.0s cast, range 100 circle, raidwide
+    EdgeOfOblivion = 40174, // FragmentOfFate->self, 5.0s cast, range 100 circle, minor raidwide
     AkhRhai = 40237, // Helper->location, 2.5s cast, range 4 circle, visual (puddle)
     AkhRhaiAOE = 40238, // Helper->location, no cast, range 4 circle, repeated puddle x10
 
@@ -225,10 +231,63 @@ public enum AID : uint
     AkhMornAOEOracle = 40303, // Helper->players, no cast, range 4 circle, 4-hit 4-man stack
     MornAfahUsurper = 40249, // UsurperOfFrostP4->self, 6.0s cast, single-target, visual (full raid stack, lethal if hp difference is large)
     MornAfahOracle = 40304, // OracleOfDarknessP4->self, 6.0s cast, single-target, visual (full raid stack, lethal if hp difference is large)
-    MornAfahAOE = 40250, // Helper->players, no cast, range 4 circle, wipe if hp difference check fails ?
+    MornAfahAOE = 40250, // Helper->players, no cast, range 4 circle, 8-man stack on usurper target, wipe if hp difference check fails
 
     CrystallizeTimeUsurper = 40240, // UsurperOfFrostP4->self, 10.0s cast, single-target, visual
     CrystallizeTimeOracle = 40298, // OracleOfDarknessP4->self, 10.0s cast, range 100 circle, raidwide
+    CrystallizeTimeMaelstrom = 40299, // SorrowsHourglass->self, 1.5s cast, range 12 circle, hourglass aoe
+    CrystallizeTimeDarkAero = 40280, // Helper->players, no cast, range 15 circle, knockback 30
+    TidalLight = 40251, // UsurperOfFrostP4->self, 3.0s cast, single-target, visual (exalines)
+    TidalLightAOEFirst = 40252, // Helper->self, 3.0s cast, range 10 width 40 rect
+    TidalLightAOERest = 40253, // Helper->self, 2.0s cast, range 10 width 40 rect
+    Quietus = 40281, // Helper->self, no cast, range 50 circle, raidwide
+    LongingOfTheLost = 40241, // Helper->location, no cast, range 12 circle, aoe when head is touched
+    DrachenWandererDisappear = 40244, // DrachenWanderer->self, no cast, single-target, visual (disappear)
+    JoylessDragonsong = 40242, // Helper->self, no cast, range 40 circle, wipe if ???
+    CrystallizeTimeHallowedWings1 = 40229, // UsurperOfFrostP4->self, 4.7+1.3s cast, single-target, visual (first knockback)
+    CrystallizeTimeHallowedWings2 = 40230, // UsurperOfFrostP4->self, 0.5+1.3s cast, single-target, visual (second knockback)
+    CrystallizeTimeHallowedWingsAOE = 40332, // UsurperOfFrostP4->self, 0.5s cast, range 40 width 50 rect, knockback 20, heavy damage on first target, vuln on first 4 targets
+
+    MemorysEndP4 = 40305, // OracleOfDarknessP4->self, 10.0s cast, range 100 circle, enrage
+    AbsoluteZeroP4 = 40245, // UsurperOfFrostP4->self, 10.0s cast, range 100 circle, enrage
+    ParadiseLostP4 = 40263, // Helper->self, no cast, range 100 circle, wipe on p5 failure state
+    IntermissionP5Visual = 40231, // UsurperOfFrostP4->self, no cast, single-target, visual (intermission start)
+    IntermissionP5Start = 40232, // Helper->self, no cast, range 60 circle, stun + move players to a specific spot
+
+    // P5
+    AutoAttackP5 = 40114, // BossP5->self, no cast, single-target, visual (auto attack on both tanks)
+    AutoAttackP5AOE = 40115, // Helper->player, no cast, single-target, auto-attack
+
+    FulgentBlade = 40306, // BossP5->self, 6.0s cast, range 100 circle, raidwide + mechanic start
+    PathOfLightFirst = 40307, // Helper->self, 7.0s cast, range 5 width 80 rect
+    PathOfLightRest = 40308, // Helper->self, no cast, range 5 width 80 rect
+    PathOfDarknessFirst = 40118, // Helper->self, 7.0s cast, range 5 width 80 rect
+    PathOfDarknessRest = 40309, // Helper->self, no cast, range 5 width 80 rect
+
+    AkhMornPandora = 40310, // BossP5->self, 8.0s cast, single-target, visual (left/right stack)
+    AkhMornPandoraAOE1 = 40311, // Helper->players, no cast, range 4 circle, 4-man stack
+    AkhMornPandoraAOE2 = 40312, // Helper->players, no cast, range 4 circle, 4-man stack
+
+    ParadiseRegained = 40319, // BossP5->self, 4.0s cast, single-target, visual (mechanic start)
+    WingsDarkAndLightDL = 40233, // BossP5->self, 6.9+0.1s cast, single-target, visual (dark > light)
+    WingsDarkAndLightLD = 40313, // BossP5->self, 6.9+0.1s cast, single-target, visual (light > dark)
+    WingsDarkAndLightExplosion = 40320, // Helper->self, no cast, range 3 circle, tower
+    WingsDarkAndLightUnmitigatedExplosion = 40321, // Helper->self, no cast, range 100 circle, tower fail
+    WingsDarkAndLightCleaveLight = 40314, // BossP5->self, no cast, range 100 240?-degree cone on target
+    WingsDarkAndLightCleaveDark = 40315, // BossP5->self, no cast, range 100 240?-degree cone on target
+    WingsDarkAndLightTetherLight = 39879, // Helper->players, no cast, range 4 circle on farthest
+    WingsDarkAndLightTetherDark = 39880, // Helper->player, no cast, range 4 circle on closest
+
+    PolarizingStrikes = 40316, // BossP5->self, 6.5+0.5s cast, single-target, visual (line stacks)
+    CruelPathOfLightBait = 40317, // Helper->self, 0.5s cast, range 100 width 6 rect (left side)
+    CruelPathOfDarknessBait = 40318, // Helper->self, 0.5s cast, range 100 width 6 rect (right side)
+    CruelPathOfLightAOE = 40119, // Helper->self, no cast, range 100 width 6 rect (repeated hit)
+    CruelPathOfDarknessAOE = 40120, // Helper->self, no cast, range 100 width 6 rect (repeated hit)
+    PolarizingPaths = 40234, // BossP5->self, 2.5+0.5s cast, single-target, visual (second+ hit)
+
+    PandorasBox = 40326, // BossP5->self, 12.0s cast, range 100 circle, raidwide requiring tank LB
+    ParadiseLostP5 = 40327, // BossP5->self, 12.0+9.5s cast, range 100 circle, visual (enrage)
+    ParadiseLostP5AOE = 40328, // Helper->self, 21.5s cast, range 100 circle, wipe
 }
 
 public enum SID : uint
@@ -261,6 +320,8 @@ public enum SID : uint
     SpellInWaitingDarkAero = 2463, // none->player, extra=0x0
     //SpellInWaitingReturn = 4208, // none->player, extra=0x0
     //SpellInWaitingReturnII = 4171, // Helper->UsurperOfFrostP4, extra=0x0
+    LightResistanceDown = 4164, // Helper->player, extra=0x0
+    DarkResistanceDown = 3323, // Helper->player, extra=0x0
 }
 
 public enum IconID : uint
@@ -288,4 +349,5 @@ public enum TetherID : uint
     UltimateRelativitySlow = 133, // DelightsHourglass->BossP3
     UltimateRelativityQuicken = 134, // DelightsHourglass->BossP3
     MornAfahHPCheck = 1, // UsurperOfFrostP4->OracleOfDarknessP4
+    MornAfahHPFail = 2, // UsurperOfFrostP4->OracleOfDarknessP4
 }
