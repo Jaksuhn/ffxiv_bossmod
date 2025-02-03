@@ -60,7 +60,7 @@ public sealed class AIHints
 
     // positioning: list of shapes that are either forbidden to stand in now or will be in near future
     // AI will try to move in such a way to avoid standing in any forbidden zone after its activation or outside of some restricted zone after its activation, even at the cost of uptime
-    public List<(Func<WPos, float> shapeDistance, DateTime activation)> ForbiddenZones = [];
+    public List<(Func<WPos, float> shapeDistance, DateTime activation, ulong Source)> ForbiddenZones = [];
 
     // positioning: list of goal functions
     // AI will try to move to reach non-forbidden point with highest goal value (sum of values returned by all functions)
@@ -85,9 +85,10 @@ public sealed class AIHints
     // AI will attempt to shield & mitigate
     public List<(BitMask players, DateTime activation)> PredictedDamage = [];
 
-    // estimate of the maximal time we can spend casting before we need to move
-    // TODO: reconsider...
-    public float MaxCastTimeEstimate = float.MaxValue;
+    // maximal time we can spend casting before we need to move
+    // this is used by the action queue to skip casts that we won't be able to finish and execute lower-priority fallback actions instead
+    public float MaxCastTime = float.MaxValue;
+    public bool ForceCancelCast;
 
     // actions that we want to be executed, gathered from various sources (manual input, autorotation, planner, ai, modules, etc.)
     public ActionQueue ActionsToExecute = new();
@@ -117,7 +118,8 @@ public sealed class AIHints
         ImminentSpecialMode = default;
         MisdirectionThreshold = 15.Degrees();
         PredictedDamage.Clear();
-        MaxCastTimeEstimate = float.MaxValue;
+        MaxCastTime = float.MaxValue;
+        ForceCancelCast = false;
         ActionsToExecute.Clear();
         StatusesToCancel.Clear();
         WantJump = false;
@@ -145,11 +147,17 @@ public sealed class AIHints
             h.Priority = Math.Max(h.Priority, 0);
     }
 
+    public void SetPriority(Actor actor, int priority)
+    {
+        if (FindEnemy(actor) is { } enemy)
+            enemy.Priority = priority;
+    }
+
     public void InteractWithOID(WorldState ws, uint oid) => InteractWithTarget = ws.Actors.FirstOrDefault(a => a.OID == oid && a.IsTargetable);
     public void InteractWithOID<OID>(WorldState ws, OID oid) where OID : Enum => InteractWithOID(ws, (uint)(object)oid);
 
-    public void AddForbiddenZone(Func<WPos, float> shapeDistance, DateTime activation = new()) => ForbiddenZones.Add((shapeDistance, activation));
-    public void AddForbiddenZone(AOEShape shape, WPos origin, Angle rot = new(), DateTime activation = new()) => ForbiddenZones.Add((shape.Distance(origin, rot), activation));
+    public void AddForbiddenZone(Func<WPos, float> shapeDistance, DateTime activation = new(), ulong source = 0) => ForbiddenZones.Add((shapeDistance, activation, source));
+    public void AddForbiddenZone(AOEShape shape, WPos origin, Angle rot = new(), DateTime activation = new(), ulong source = 0) => ForbiddenZones.Add((shape.Distance(origin, rot), activation, source));
 
     public void AddSpecialMode(SpecialMode mode, DateTime activation)
     {

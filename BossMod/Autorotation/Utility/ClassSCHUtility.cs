@@ -9,11 +9,6 @@ public sealed class ClassSCHUtility(RotationModuleManager manager, Actor player)
     public enum AetherpactOption { None, Use, End }
     public enum RecitationOption { None, Use, UseEx }
     public enum PetOption { None, Eos, Seraph }
-    public float GetStatusDetail(Actor target, SGE.SID sid) => StatusDetails(target, sid, Player.InstanceID).Left; //Checks if Status effect is on target
-    public bool HasEffect(Actor target, SGE.SID sid, float duration) => GetStatusDetail(target, sid) < duration; //Checks if anyone has a status effect
-    public float GetStatusDetail(Actor target, SCH.SID sid) => StatusDetails(target, sid, Player.InstanceID).Left; //Checks if Status effect is on target
-    public bool HasEffect(Actor target, SCH.SID sid, float duration) => GetStatusDetail(target, sid) < duration; //Checks if anyone has a status effect
-    public Actor? TargetChoice(StrategyValues.OptionRef strategy) => ResolveTargetOverride(strategy.Value);
 
     public static readonly ActionID IDLimitBreak3 = ActionID.MakeSpell(SCH.AID.AngelFeathers);
 
@@ -80,23 +75,24 @@ public sealed class ClassSCHUtility(RotationModuleManager manager, Actor player)
         return res;
     }
 
+    // TODO: revise, this should be much simpler
     public override void Execute(StrategyValues strategy, ref Actor? primaryTarget, float estimatedAnimLockDelay, bool isMoving)
     {
         ExecuteShared(strategy, IDLimitBreak3, primaryTarget);
         ExecuteSimple(strategy.Option(Track.WhisperingDawn), SCH.AID.WhisperingDawn, Player);
-        ExecuteSimple(strategy.Option(Track.Adloquium), SCH.AID.Adloquium, TargetChoice(strategy.Option(Track.Adloquium)) ?? Player);
+        ExecuteSimple(strategy.Option(Track.Adloquium), SCH.AID.Adloquium, Player, 2); // TODO[cast-time]: adjustment (swiftcast etc)
         ExecuteSimple(strategy.Option(Track.FeyIllumination), SCH.AID.FeyIllumination, Player);
         ExecuteSimple(strategy.Option(Track.Indomitability), SCH.AID.Indomitability, Player);
         ExecuteSimple(strategy.Option(Track.EmergencyTactics), SCH.AID.EmergencyTactics, Player);
         ExecuteSimple(strategy.Option(Track.Dissipation), SCH.AID.Dissipation, primaryTarget);
-        ExecuteSimple(strategy.Option(Track.Excogitation), SCH.AID.Excogitation, TargetChoice(strategy.Option(Track.Excogitation)) ?? Player);
+        ExecuteSimple(strategy.Option(Track.Excogitation), SCH.AID.Excogitation, Player);
         ExecuteSimple(strategy.Option(Track.FeyBlessing), SCH.AID.FeyBlessing, Player);
         ExecuteSimple(strategy.Option(Track.Consolation), SCH.AID.Consolation, Player);
-        ExecuteSimple(strategy.Option(Track.Protraction), SCH.AID.Protraction, TargetChoice(strategy.Option(Track.Protraction)) ?? Player);
+        ExecuteSimple(strategy.Option(Track.Protraction), SCH.AID.Protraction, Player);
         ExecuteSimple(strategy.Option(Track.Expedient), SCH.AID.Expedient, Player);
         ExecuteSimple(strategy.Option(Track.Seraphism), SCH.AID.Seraphism, Player);
 
-        var alreadyUp = HasEffect(Player, SGE.SID.EukrasianPrognosis, 30) || HasEffect(Player, SCH.SID.Galvanize, 30);
+        var shieldUp = StatusDetails(Player, SCH.SID.Galvanize, Player.InstanceID).Left > 0.1f || StatusDetails(Player, SGE.SID.EukrasianPrognosis, Player.InstanceID).Left > 0.1f;
         var succ = strategy.Option(Track.Succor);
         var succAction = succ.As<SuccorOption>() switch
         {
@@ -104,7 +100,7 @@ public sealed class ClassSCHUtility(RotationModuleManager manager, Actor player)
             SuccorOption.Concitation => SCH.AID.Concitation,
             _ => default
         };
-        if (succAction != default && !alreadyUp)
+        if (succAction != default && !shieldUp)
             QueueOGCD(succAction, Player);
 
         var soil = strategy.Option(Track.SacredSoil);
@@ -114,21 +110,24 @@ public sealed class ClassSCHUtility(RotationModuleManager manager, Actor player)
             _ => default
         };
         if (soilAction != default)
-            QueueOGCD(soilAction, TargetChoice(soil) ?? primaryTarget ?? Player);
+            QueueOGCD(soilAction, ResolveTargetOverride(soil.Value) ?? primaryTarget ?? Player);
 
         var deploy = strategy.Option(Track.DeploymentTactics);
         if (deploy.As<DeployOption>() != DeployOption.None)
             QueueOGCD(SCH.AID.DeploymentTactics, Player);
 
+
         var pact = strategy.Option(Track.Aetherpact);
-        var pactAction = pact.As<AetherpactOption>() switch
+        var pactStrat = pact.As<AetherpactOption>();
+        var pactTarget = ResolveTargetOverride(pact.Value) ?? primaryTarget ?? Player;
+        var juicing = pactTarget.FindStatus(SCH.SID.FeyUnion) != null;
+        if (pactStrat != AetherpactOption.None)
         {
-            AetherpactOption.Use => SCH.AID.Aetherpact,
-            AetherpactOption.End => SCH.AID.DissolveUnion,
-            _ => default
-        };
-        if (pactAction != default)
-            QueueOGCD(pactAction, Player);
+            if (pactStrat == AetherpactOption.Use && !juicing)
+                QueueOGCD(SCH.AID.Aetherpact, pactTarget);
+            if (pactStrat == AetherpactOption.End && juicing)
+                QueueOGCD(SCH.AID.DissolveUnion, pactTarget);
+        }
 
         var recit = strategy.Option(Track.Recitation);
         if (recit.As<RecitationOption>() != RecitationOption.None)
@@ -146,24 +145,6 @@ public sealed class ClassSCHUtility(RotationModuleManager manager, Actor player)
     }
 
     #region Core Execution Helpers
-
-    public SCH.AID NextGCD; //Next global cooldown action to be used
-    public void QueueGCD<P>(SCH.AID aid, Actor? target, P priority, float delay = 0) where P : Enum
-        => QueueGCD(aid, target, (int)(object)priority, delay);
-
-    public void QueueGCD(SCH.AID aid, Actor? target, int priority = 8, float delay = 0)
-    {
-        var NextGCDPrio = 0;
-
-        if (priority == 0)
-            return;
-
-        if (QueueAction(aid, target, ActionQueue.Priority.High, delay) && priority > NextGCDPrio)
-        {
-            NextGCD = aid;
-        }
-    }
-
     public void QueueOGCD<P>(SCH.AID aid, Actor? target, P priority, float delay = 0) where P : Enum
         => QueueOGCD(aid, target, (int)(object)priority, delay);
 
@@ -199,9 +180,8 @@ public sealed class ClassSCHUtility(RotationModuleManager manager, Actor player)
                 targetPos = target.PosRot.XYZ();
         }
 
-        Hints.ActionsToExecute.Push(ActionID.MakeSpell(aid), target, priority, delay: delay, targetPos: targetPos);
+        Hints.ActionsToExecute.Push(ActionID.MakeSpell(aid), target, priority, delay: delay, castTime: def.CastTime, targetPos: targetPos); // TODO[cast-time]: this probably needs explicit cast-time argument (adjusted by swiftcast etc)
         return true;
     }
     #endregion
-
 }
