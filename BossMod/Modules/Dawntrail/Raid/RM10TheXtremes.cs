@@ -114,7 +114,7 @@ class SickestTakeOff(BossModule module) : Components.StandardAOEs(module, AID.Si
 class DeepVarial(BossModule module) : Components.GenericAOEs(module)
 {
     private readonly List<AOEInstance> _aoes = [];
-    private static readonly AOEShapeCone cone = new(60f, 45.Degrees());
+    private static readonly AOEShapeCone cone = new(60f, 60.Degrees());
 
     public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor)
     {
@@ -236,7 +236,7 @@ class RM10TheXtremesStates : StateMachineBuilder
     }
 }
 
-[ModuleInfo(BossModuleInfo.Maturity.Contributed, Contributors = "VeraNala", GroupType = BossModuleInfo.GroupType.CFC, GroupID = 1070, NameID = 14470)]
+[ModuleInfo(Contributors = "VeraNala", GroupType = BossModuleInfo.GroupType.CFC, GroupID = 1070, NameID = 14470)]
 public class RM10TheXtremes(WorldState ws, Actor primary) : BossModule(ws, primary, new(100, 100), new ArenaBoundsRect(20, 20))
 {
     protected override void DrawEnemies(int pcSlot, Actor pc)

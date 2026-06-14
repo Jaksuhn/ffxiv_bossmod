@@ -199,7 +199,10 @@ class TwilightNebula(BossModule module) : FloorAOE(module, AID.TwilightNebula1)
     }
 }
 
-class Starflare(BossModule module) : Components.GroupedAOEs(module, [AID.StarflareP1Fast, AID.StarflareP1Slow], new AOEShapeRect(60, 5), maxCasts: 10);
+class Starflare(BossModule module) : Components.GroupedAOEs(module, [AID.StarflareP1Fast, AID.StarflareP1Slow], new AOEShapeRect(60, 5))
+{
+    public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor) => Casters.Where(c => Helpers.Level(c) == Helpers.Level(actor)).Take(5).Select(c => new AOEInstance(Shape, c.CastInfo!.LocXZ, c.CastInfo!.Rotation, Module.CastFinishAt(c.CastInfo)));
+}
 
 class VortexLook(BossModule module) : Components.GenericGaze(module, null, true)
 {
@@ -737,7 +740,7 @@ class A36ShinryuParadoxStates : StateMachineBuilder
     }
 }
 
-[ModuleInfo(BossModuleInfo.Maturity.Verified, GroupType = BossModuleInfo.GroupType.CFC, GroupID = 1117, NameID = 14729)]
+[ModuleInfo(GroupType = BossModuleInfo.GroupType.CFC, GroupID = 1117, NameID = 14729)]
 public class A36ShinryuParadox(WorldState ws, Actor primary) : BossModule(ws, primary, new(820, -820), new ArenaBoundsRect(30, 20))
 {
     Actor? Groin;
