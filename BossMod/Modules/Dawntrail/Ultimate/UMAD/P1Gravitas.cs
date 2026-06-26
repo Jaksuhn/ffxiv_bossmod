@@ -2,7 +2,10 @@
 
 class P1GravitasVitrophyre : Components.UniformStackSpread
 {
+    readonly UMADConfig _config = Service.Config.Get<UMADConfig>();
     readonly List<Spread> _predicted = [];
+
+    Angle _facingBoss;
 
     public void SetNegativeOffset(float value)
     {
@@ -12,7 +15,7 @@ class P1GravitasVitrophyre : Components.UniformStackSpread
             Spreads.Ref(i).Activation -= TimeSpan.FromSeconds(value);
     }
 
-    public P1GravitasVitrophyre(BossModule module) : base(module, 5, 0)
+    public P1GravitasVitrophyre(BossModule module) : base(module, 5, 5)
     {
         PermitOverlap = true;
     }
@@ -32,6 +35,7 @@ class P1GravitasVitrophyre : Components.UniformStackSpread
     {
         if ((AID)spell.Action.ID == AID.Gravitas && Stacks.Count > 0)
         {
+            _facingBoss = (Arena.Center - Stacks[0].Target.Position).ToAngle();
             Stacks.RemoveAt(0);
             Spreads.AddRange(_predicted);
             _predicted.Clear();
@@ -39,6 +43,67 @@ class P1GravitasVitrophyre : Components.UniformStackSpread
 
         if ((AID)spell.Action.ID == AID.Vitrophyre && Spreads.Count > 0)
             Spreads.RemoveAt(0);
+    }
+
+    public override void AddHints(int slot, Actor actor, TextHints hints)
+    {
+        base.AddHints(slot, actor, hints);
+
+        if (_predicted.Any(t => t.Target == actor))
+            hints.Add("Prepare to spread!", false);
+
+        if (IsSpreadTarget(actor) && Module.Enemies(OID.Gravitas).Any(g => actor.Position.InCircle(g.Position, 10)))
+            hints.Add("Bait away from puddles!");
+    }
+
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints)
+    {
+        switch (_config.P1GravityPuddleStrategy)
+        {
+            case UMADConfig.P1GravityPuddlePlacement.None:
+                base.AddAIHints(slot, actor, assignment, hints);
+                break;
+
+            case UMADConfig.P1GravityPuddlePlacement.StackAll:
+                if (Stacks.FirstOrNull() is { Activation: var a })
+                {
+                    WPos dest;
+                    if (!Module.Enemies(OID.Gravitas).Any())
+                    {
+                        dest = new(99.5f, 88);
+                        if (Module.FindComponent<P1BlizzardIIIBlowout>()?.Check(slot, actor, dest) == true)
+                            dest.X += 1;
+                    }
+                    else
+                        dest = new(100, 112);
+                    if (IsStackTarget(actor))
+                        hints.AddForbiddenZone(ShapeContains.PrecisePosition(dest, new(0, 1), 0.5f, actor.Position, 0.5f), a);
+                    else
+                        hints.AddForbiddenZone(ShapeContains.InvertedCircle(new(100, dest.Z), 4.5f), a);
+                }
+                else
+                    base.AddAIHints(slot, actor, assignment, hints);
+                break;
+        }
+
+        if (IsSpreadTarget(actor))
+        {
+            var gravity = Module.Enemies(OID.Gravitas).Select(g => ShapeContains.Circle(g.Position, 5 + SpreadRadius + ExtraAISpreadThreshold)).ToList();
+            // away from gravity
+            hints.AddForbiddenZone(ShapeContains.Union(gravity), Spreads[0].Activation);
+
+            var spreadParty = _config.P1GravityPuddleSpread[assignment];
+            // spread on predetermined side, otherwise we confuse our teammates
+            if (spreadParty >= 0)
+            {
+                var safeSide = spreadParty == 0 ? _facingBoss + 90.Degrees() : _facingBoss - 90.Degrees();
+                var ctr = Arena.Center + safeSide.ToDirection() * 5;
+                hints.GoalZones.Add(p => p.InCone(ctr, safeSide, 90.Degrees()) ? 1 : 0);
+            }
+        }
+        else if (Spreads.Count > 0 && Stacks.Count == 0)
+            // stay under boss for max safety
+            hints.GoalZones.Add(hints.GoalSingleTarget(Module.PrimaryActor.Position, 1));
     }
 }
 
@@ -113,6 +178,12 @@ class P1GravitationalWaveIntemperateWill(BossModule module) : Components.Generic
     AOEInstance? _predicted;
 
     public override IEnumerable<AOEInstance> ActiveAOEs(int slot, Actor actor) => Utils.ZeroOrOne(_predicted).Select(w => w with { Risky = Risky });
+
+    public override void AddAIHints(int slot, Actor actor, PartyRolesConfig.Assignment assignment, AIHints hints)
+    {
+        foreach (var aoe in ActiveAOEs(slot, actor))
+            hints.AddForbiddenZone(aoe.Check, aoe.Activation);
+    }
 
     public override void OnActorEAnim(Actor actor, uint state)
     {

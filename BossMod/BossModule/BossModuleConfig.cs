@@ -1,4 +1,6 @@
-﻿namespace BossMod;
+﻿using Dalamud.Interface.Utility;
+
+namespace BossMod;
 
 [ConfigDisplay(Name = "Boss Modules and Radar", Order = 1)]
 public class BossModuleConfig : ConfigNode
@@ -55,6 +57,8 @@ public class BossModuleConfig : ConfigNode
     [PropertySlider(0.1f, 10, Speed = 0.1f, Logarithmic = true)]
     public float ArenaScale = 1;
 
+    public float EffectiveArenaScale => ImGuiHelpers.GlobalScale * ArenaScale;
+
     [PropertyDisplay("Radar element thickness scale factor", tooltip: "Globally scales the outline thickness of radar elements")]
     [PropertySlider(0.1f, 10, Speed = 0.1f, Logarithmic = true)]
     public float ThicknessScale = 1;
@@ -73,6 +77,9 @@ public class BossModuleConfig : ConfigNode
 
     [PropertyDisplay("Show cardinal direction names on radar")]
     public bool ShowCardinals = false;
+
+    [PropertyDisplay("Draw N cardinal in a different color", depends: nameof(ShowCardinals), since: "7.5.1.6")]
+    public bool HighlightN = false;
 
     [PropertyDisplay("Cardinal direction font size")]
     [PropertySlider(0.1f, 100, Speed = 1)]

@@ -1,6 +1,6 @@
 ﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace BossMod;
@@ -101,6 +101,39 @@ class SmartRotationNotice : ChangelogNotice
     public override void Draw()
     {
         ImGui.TextWrapped("'Smart character orientation' has been changed to be enabled by default. You can disable it in Settings -> Action Tweaks.");
+    }
+}
+
+class ArenaScaleNotice : ChangelogNotice
+{
+    public override Version Since => new(7, 5, 1, 10);
+
+    readonly BossModuleConfig _bmc = Service.Config.Get<BossModuleConfig>();
+    bool _adjusted;
+
+    public override void Draw()
+    {
+        var scale = ImGuiHelpers.GlobalScale;
+        ImGui.TextWrapped("The VBM radar now respects your global Dalamud UI scale.");
+        if (scale == 1)
+        {
+            ImGui.TextWrapped("You're using a global scale of 100%, so this won't change anything.");
+        }
+        else if (_adjusted)
+        {
+            ImGui.Text("Settings have been saved.");
+        }
+        else
+        {
+            ImGui.TextWrapped($"Your saved radar scale was {_bmc.ArenaScale:f2}, which is now {_bmc.ArenaScale * scale:f2} when global scaling is applied.");
+            ImGui.TextWrapped($"For the radar to be the same size as it was before this update, you should set it to {_bmc.ArenaScale / scale:f2}.");
+            if (ImGui.Button("Set it for me"))
+            {
+                _bmc.ArenaScale /= scale;
+                _bmc.Modified.Fire();
+                _adjusted = true;
+            }
+        }
     }
 }
 
@@ -221,15 +254,18 @@ public class ConfigChangelogWindow : UIWindow
         }
     }
 
-    private static Version GetCurrentPluginVersion()
+    public static Version GetCurrentPluginVersion()
     {
-        return Service.IsDev ? new(999, 0, 0, 0) : Assembly.GetExecutingAssembly().GetName().Version!;
+        return Assembly.GetExecutingAssembly().GetName().Version!;
     }
 
-    [SuppressMessage("Design", "CA1024:Use properties where appropriate", Justification = "fuck it")]
-    private static Version GetPreviousPluginVersion()
+#pragma warning disable CA1024 // Use properties where appropriate
+    public static Version GetPreviousPluginVersion()
     {
+        // uncomment to test changelog
+        // return new(7, 5, 1, 0);
+
         // change to a smaller value to test changelog
-        return Service.IsDev ? new(999, 0, 0, 0) : Service.Config.AssemblyVersion;
+        return Service.Config.AssemblyVersion;
     }
 }
