@@ -265,8 +265,9 @@ public abstract class BossModule : IDisposable
             var originCell = (Center - entry.Origin) / bitmap.PixelSize;
             var originX = (int)originCell.X;
             var originZ = (int)originCell.Z;
-            var halfSize = (int)(Bounds.Radius / bitmap.PixelSize);
-            hints.PathfindMapObstacles = new(bitmap, new(originX - halfSize, originZ - halfSize, originX + halfSize, originZ + halfSize));
+            var halfH = (int)(Bounds.PfHalfHeight / bitmap.PixelSize);
+            var halfW = (int)(Bounds.PfHalfWidth / bitmap.PixelSize);
+            hints.PathfindMapObstacles = new(bitmap, new(originX - halfW, originZ - halfH, originX + halfW, originZ + halfH));
         }
 
         foreach (var comp in _components)
@@ -371,6 +372,14 @@ public abstract class BossModule : IDisposable
             if (WindowConfig.ShowOutlinesAndShadows)
                 Arena.TextWorld(new(pos.Value.XZ()), text, 0xFF000000, 25);
             Arena.TextWorld(new(pos.Value.XZ()), text, color, 22);
+
+            if (WindowConfig.StrokeWaymarks)
+            {
+                if (text is "A" or "B" or "C" or "D")
+                    Arena.AddCircle(new(pos.Value.XZ()), 1.25f, color);
+                else
+                    Arena.AddRect(new(pos.Value.XZ()), new(0, 1), 1.1f, 1.1f, 1.1f, color);
+            }
         }
     }
 
